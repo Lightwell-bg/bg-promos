@@ -41,27 +41,19 @@ export default defineConfig({
         // page is always fetched fresh; index.html is the offline fallback.
         navigateFallback: null,
         cleanupOutdatedCaches: true,
+        // A new worker takes over open pages at once, so a fixed version replaces a broken one
+        // without the user closing every tab / the Telegram mini app.
+        skipWaiting: true,
+        clientsClaim: true,
+        // Offer images are NOT routed through the service worker: the browser loads them
+        // directly (CSP img-src) with its normal HTTP cache. Routing them through the SW made
+        // them depend on connect-src and on the SW version installed on the device.
         runtimeCaching: [
           {
             urlPattern: ({ request, url }) => request.mode === "navigate" && !url.pathname.startsWith("/api/"),
             // Network with a 4 s timeout; precached /index.html on timeout, error or HTTP >= 500.
             // Serialised into sw.js via toString(), see src/sw/navigationHandler.ts.
             handler: navigationHandler,
-          },
-          {
-            // The SW fetches these images itself, so every host here must also be in the
-            // CSP connect-src (web/security-headers.conf), not only img-src - checked by cspHosts.test.ts.
-            urlPattern: ({ request, url }) =>
-              request.destination === "image" &&
-              ["kaufland.media.schwarz", "imgproxy-retcat.assets.schwarz", "media.kaufland.com", "www.lidl.bg"].includes(
-                url.hostname,
-              ),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "offer-images",
-              expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 60 * 60, purgeOnQuotaError: true },
-              cacheableResponse: { statuses: [0, 200] },
-            },
           },
         ],
       },
