@@ -49,9 +49,13 @@ export default defineConfig({
             handler: navigationHandler,
           },
           {
-            urlPattern: ({ url }) =>
-              url.hostname.endsWith("kaufland.media.schwarz") ||
-              url.hostname.endsWith("imgproxy-retcat.assets.schwarz"),
+            // The SW fetches these images itself, so every host here must also be in the
+            // CSP connect-src (web/security-headers.conf), not only img-src - checked by cspHosts.test.ts.
+            urlPattern: ({ request, url }) =>
+              request.destination === "image" &&
+              ["kaufland.media.schwarz", "imgproxy-retcat.assets.schwarz", "media.kaufland.com", "www.lidl.bg"].includes(
+                url.hostname,
+              ),
             handler: "CacheFirst",
             options: {
               cacheName: "offer-images",
