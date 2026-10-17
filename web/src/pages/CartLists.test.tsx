@@ -153,6 +153,26 @@ describe("sharing and managing lists", () => {
     );
   });
 
+  it("the open panel follows the list: removing an item updates both links (no stale link)", async () => {
+    await renderWithCart(<Cart />, { cart: cartOf([A, 2], [B, 1]), config: { telegram_bot: "promoseubot" } });
+    await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
+    const web = () => (screen.getByRole("textbox", { name: "За браузър" }) as HTMLInputElement).value;
+    const tg = () => (screen.getByRole("textbox", { name: "Telegram" }) as HTMLInputElement).value;
+    expect(web()).toContain(A);
+    expect(tg()).toContain(A);
+    // remove A while the panel stays open
+    const removeButtons = screen.getAllByRole("button", { name: "Премахни от количката" });
+    await userEvent.click(removeButtons[0]);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Премахни от количката" })).toHaveLength(1));
+    const left = decodeShare(shareFromHash(new URL(web()).hash)).map((i) => i.offerId);
+    expect(left).toHaveLength(1);
+    expect(web()).not.toContain(left[0] === A ? B : A);
+    expect(tg()).not.toContain(left[0] === A ? B : A);
+    // emptying the list closes the panel
+    await userEvent.click(screen.getByRole("button", { name: "Премахни от количката" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "За браузър" })).toBeNull());
+  });
+
   it("with a configured bot there are two blocks: a t.me Mini App link (used by Telegram share) and a browser link", async () => {
     await renderWithCart(<Cart />, { cart: cartOf([A, 2], [B, 1]), config: { telegram_bot: "promoseubot" } });
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));

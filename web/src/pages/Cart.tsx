@@ -12,7 +12,8 @@ import { WeightStepper } from "../components/WeightStepper";
 import { gramsOf, hasCard, isWeightLine, WEIGHT_PRESETS } from "../domain/cart";
 import { formatWeight } from "../domain/weight";
 import type { ChainGroup, ReconciledLine } from "../domain/cart";
-import { canShare, encodeStartParam, telegramStartLink } from "../domain/carts";
+import { canShare, encodeShare, encodeStartParam, shareUrl, telegramStartLink } from "../domain/carts";
+import { siteOrigin } from "../platform/env";
 import { useConfig } from "../data/ConfigContext";
 import { conditionChips, formatEUR, priceModel, unitKey } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
@@ -61,7 +62,21 @@ export function Cart() {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [note, setNote] = useState("");
   const config = useConfig();
-  const [links, setLinks] = useState<{ tg: string | null; web: string } | null>(null);
+  // The panel only remembers that it is open: the links are derived from the CURRENT list on every
+  // render, so deleting/changing items while it is open can never leave a stale link to forward.
+  const [shareOpen, setShareOpen] = useState(false);
+  const webValue = encodeShare(cart.state);
+  const tgParam = config.telegram_bot ? encodeStartParam(cart.state) : null;
+  const links =
+    shareOpen && webValue
+      ? {
+          tg: config.telegram_bot && tgParam ? telegramStartLink(config.telegram_bot, tgParam) : null,
+          web: shareUrl(config.site_url || siteOrigin(), lang, webValue),
+        }
+      : null;
+  useEffect(() => {
+    if (shareOpen && !webValue) setShareOpen(false); // list emptied while the panel was open
+  }, [shareOpen, webValue]);
   const [copyNote, setCopyNote] = useState<{ block: "tg" | "web"; ok: boolean } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -87,17 +102,14 @@ export function Cart() {
   // Always open a panel with the visible link: Telegram webviews often have no share sheet and
   // deny the clipboard, so a silent navigator.share/clipboard attempt looked like "nothing happens".
   function onShare() {
-    const webUrl = cart.shareLink(lang);
-    if (!webUrl) {
+    // Two links: a t.me link that opens the bot's Mini App directly (needs a configured bot and a list
+    // that fits into the 512-char startapp parameter) and the plain web link for the browser.
+    if (!cart.shareLink(lang)) {
       setNote(t("cart.shareFailed"));
       return;
     }
-    // Two links: a t.me link that opens the bot's Mini App directly (needs a configured bot and a list
-    // that fits into the 512-char startapp parameter) and the plain web link for the browser.
-    const param = config.telegram_bot ? encodeStartParam(cart.state) : null;
-    const tgLink = config.telegram_bot && param ? telegramStartLink(config.telegram_bot, param) : null;
     setCopyNote(null);
-    setLinks({ tg: tgLink, web: webUrl });
+    setShareOpen(true);
   }
 
   async function onCopy(block: "tg" | "web", url: string) {
@@ -160,7 +172,7 @@ export function Cart() {
             {t("cart.shareSystem")}
           </button>
         )}
-        <button type="button" className={page.secondaryBtn} onClick={() => setLinks(null)}>
+        <button type="button" className={page.secondaryBtn} onClick={() => setShareOpen(false)}>
           {t("cart.shareClose")}
         </button>
       </div>
