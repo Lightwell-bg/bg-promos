@@ -97,7 +97,8 @@ for a cheap freshness check.
   "operator": "CenterAI",
   "site_url": "https://promos.centerai.eu",
   "brochures": {"lidl": "https://...", "kaufland": "https://...", "billa": "https://..."},
-  "report_enabled": true
+  "report_enabled": true,
+  "telegram_bot": "promoseubot or null (config.ini [bot] username; cart share links open t.me/<bot>?startapp=...)"
 }
 ```
 

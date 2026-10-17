@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDS, offerById, sampleCatalog, SAMPLE_TODAY } from "../__fixtures__";
 import { CART_KEY_V1, CARTS_KEY } from "../data/CartContext";
 import { addOffer, EMPTY_CART, type CartState } from "../domain/cart";
-import { activeCart, decodeShare, encodeShare, initialCarts, parseCarts, shareFromHash, switchCart } from "../domain/carts";
+import { activeCart, decodeShare, encodeShare, encodeStartParam, initialCarts, parseCarts, shareFromHash, switchCart } from "../domain/carts";
 import { setSharer, webSharer, type ShareData, type ShareResult } from "../platform/share";
 import { renderWithCart } from "../test/cartHarness";
 import { Cart } from "./Cart";
@@ -153,6 +153,38 @@ describe("sharing and managing lists", () => {
         { offerId: B, qty: 1 },
       ].sort((x, y) => x.offerId.localeCompare(y.offerId)),
     );
+  });
+
+  it("with a configured bot the panel link is a t.me Mini App link, used by Telegram share too", async () => {
+    await renderWithCart(<Cart />, { cart: cartOf([A, 2], [B, 1]), config: { telegram_bot: "promoseubot" } });
+    await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
+    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    expect(input.value).toMatch(/^https:\/\/t\.me\/promoseubot\?startapp=c1_[0-9a-f]{12}/);
+    expect(input.value).toBe(`https://t.me/promoseubot?startapp=${encodeStartParam(cartOf([A, 2], [B, 1]))}`);
+    const tg = screen.getByRole("link", { name: "Изпрати в Telegram" }) as HTMLAnchorElement;
+    const tgUrl = new URL(tg.href);
+    expect(tgUrl.origin + tgUrl.pathname).toBe("https://t.me/share/url");
+    expect(tgUrl.searchParams.get("url")).toBe(input.value);
+    expect(tgUrl.searchParams.get("text")).toBe("Моята количка");
+    expect(screen.queryByText(/ще се отвори в браузъра/)).toBeNull();
+  });
+
+  it("a list too long for startapp falls back to the web link with a note", async () => {
+    const first = cartOf([A, 1]).lines[0];
+    const lines = Array.from({ length: 40 }, (_, i) => ({ ...first, offerId: i.toString(16).padStart(12, "0") }));
+    await renderWithCart(<Cart />, { cart: { ...EMPTY_CART, lines }, config: { telegram_bot: "promoseubot" } });
+    await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
+    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    expect(new URL(input.value).pathname).toBe("/bg/cart/import");
+    expect(screen.getByText("Списъкът е дълъг — връзката ще се отвори в браузъра")).toBeInTheDocument();
+  });
+
+  it("without a configured bot the web link and the note are shown", async () => {
+    await renderWithCart(<Cart />, { cart: cartOf([A, 2]), config: { telegram_bot: null } });
+    await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
+    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    expect(new URL(input.value).pathname).toBe("/bg/cart/import");
+    expect(screen.getByText("Списъкът е дълъг — връзката ще се отвори в браузъра")).toBeInTheDocument();
   });
 
   it("no share button for an empty list", async () => {

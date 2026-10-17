@@ -89,6 +89,8 @@ export interface AppConfig {
   site_url: string;
   brochures: Partial<Record<ChainId, string>>;
   report_enabled: boolean;
+  /** Public bot username (no @) for t.me/<bot>?startapp= share links; null = not configured. */
+  telegram_bot: string | null;
 }
 
 export interface ReportRequest {

@@ -10,7 +10,8 @@ import { useCart } from "../data/CartContext";
 import { useCatalog } from "../data/CatalogContext";
 import { hasCard } from "../domain/cart";
 import type { ChainGroup, ReconciledLine } from "../domain/cart";
-import { canShare } from "../domain/carts";
+import { canShare, encodeStartParam, telegramStartLink } from "../domain/carts";
+import { useConfig } from "../data/ConfigContext";
 import { conditionChips, formatEUR, priceModel } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
@@ -57,7 +58,9 @@ export function Cart() {
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [note, setNote] = useState("");
+  const config = useConfig();
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareIsTg, setShareIsTg] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [importNote, setImportNote] = useState<ImportNote | null>(() => noteOf(location.state));
@@ -82,12 +85,17 @@ export function Cart() {
   // Always open a panel with the visible link: Telegram webviews often have no share sheet and
   // deny the clipboard, so a silent navigator.share/clipboard attempt looked like "nothing happens".
   function onShare() {
-    const url = cart.shareLink(lang);
-    if (!url) {
+    const webUrl = cart.shareLink(lang);
+    if (!webUrl) {
       setNote(t("cart.shareFailed"));
       return;
     }
-    setShareUrl(url);
+    // Preferred: a t.me link that opens the bot's Mini App directly; the web link is the fallback
+    // (no bot configured, or the list does not fit into the 512-char startapp parameter).
+    const param = config.telegram_bot ? encodeStartParam(cart.state) : null;
+    const tgLink = config.telegram_bot && param ? telegramStartLink(config.telegram_bot, param) : null;
+    setShareIsTg(tgLink !== null);
+    setShareUrl(tgLink ?? webUrl);
   }
 
   async function onCopy() {
@@ -112,6 +120,7 @@ export function Cart() {
         onFocus={(e) => e.currentTarget.select()}
       />
       <p className={styles.shareHint}>{t("cart.shareHint")}</p>
+      {!shareIsTg && <p className={styles.shareHint}>{t("cart.shareLong")}</p>}
       <div className={styles.shareActions}>
         <a
           className={page.primaryBtn}

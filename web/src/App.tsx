@@ -1,11 +1,12 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
-import { useLayoutEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AnalyticsGate } from "./components/AnalyticsGate";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CartProvider } from "./data/CartContext";
 import { CatalogProvider } from "./data/CatalogContext";
 import { ConfigProvider } from "./data/ConfigContext";
+import { decodeStartParam } from "./domain/carts";
 import type { Lang } from "./domain/types";
 import { NavDepthProvider } from "./hooks/useNavDepth";
 import { detectLang, isLang } from "./i18n";
@@ -19,7 +20,7 @@ import { Legal } from "./pages/Legal";
 import { OfferDetail } from "./pages/OfferDetail";
 import { Search } from "./pages/Search";
 import { hideSeoStatic, removeSeoStatic, setLang } from "./platform/document";
-import { browserLanguages } from "./platform/env";
+import { browserLanguages, clearTelegramStartParam, telegramStartParam } from "./platform/env";
 import { prefs } from "./platform/prefs";
 
 /** Stored choice -> browser languages -> "ru". */
@@ -37,6 +38,32 @@ export function redirectTarget(pathname: string, lang: Lang): string {
   // "/xx/catalog" (invalid prefix) keeps the rest of the path.
   const rest = pathname.replace(/^\/[^/]*/, "").replace(/\/+$/, "");
   return `/${lang}${rest}`;
+}
+
+/**
+ * Telegram Mini App launch from a shared-cart link (t.me/<bot>?startapp=c1_...): Telegram adds
+ * tgWebAppStartParam to the URL. Before any route (and the language redirect) renders, the items
+ * are taken from it, the parameter is stripped from the address bar and the app goes to the import
+ * page with the items in router state. Children are held back while the redirect is pending.
+ */
+export function StartParamGate({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const [items] = useState(() => {
+    const decoded = decodeStartParam(telegramStartParam());
+    return decoded.length ? decoded : null;
+  });
+  const [pending, setPending] = useState(items !== null);
+  const started = useRef(false);
+  // Passive effect: the router attaches its history listener in a layout effect of a parent, which
+  // runs after a child's layout effect; navigating earlier would not update the location.
+  useEffect(() => {
+    if (!items || started.current) return;
+    started.current = true;
+    clearTelegramStartParam();
+    navigate(`/${detectedLang()}/cart/import`, { replace: true, state: { startItems: items } });
+    setPending(false);
+  }, [items, navigate]);
+  return pending ? null : <>{children}</>;
 }
 
 function RootRedirect() {
@@ -100,7 +127,9 @@ export function App() {
             <AnalyticsGate />
             <NavDepthProvider>
               <ErrorBoundary>
-                <AppRoutes />
+                <StartParamGate>
+                  <AppRoutes />
+                </StartParamGate>
               </ErrorBoundary>
             </NavDepthProvider>
           </CartProvider>

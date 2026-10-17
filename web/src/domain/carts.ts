@@ -127,6 +127,40 @@ export function shareFromHash(hash: string): string | null {
   return null;
 }
 
+// ---------------------------------------------------------------- Telegram Mini App link
+//
+// https://t.me/<bot>?startapp=<param> opens the bot's main Mini App directly; Telegram passes
+// <param> to the page as ?tgWebAppStartParam=. Allowed: [A-Za-z0-9_-], at most 512 chars.
+// Format: "c1" + "_<id>" (qty 1) or "_<id>-<qty>" per line.
+export const START_PARAM_MAX = 512;
+const START_PARAM_RE = /^[A-Za-z0-9_-]{1,512}$/;
+
+/** startapp value for the list, or null when empty or longer than Telegram allows. */
+export function encodeStartParam(cart: CartState): string | null {
+  const items = cart.lines.filter((l) => ID_RE.test(l.offerId));
+  if (!items.length) return null;
+  const p = "c1" + items.map((l) => `_${l.offerId}${l.qty > 1 ? `-${Math.min(99, l.qty)}` : ""}`).join("");
+  return p.length <= START_PARAM_MAX ? p : null;
+}
+
+/** Parse an untrusted startapp value ("c1_<id>[-<qty>]..."); invalid parts skipped, duplicates merged. */
+export function decodeStartParam(param: string | null | undefined): SharedItem[] {
+  if (!param || !START_PARAM_RE.test(param) || !param.startsWith("c1_")) return [];
+  const merged = new Map<string, number>();
+  for (const part of param.slice(3).split("_")) {
+    const m = /^([0-9a-f]{12})(?:-(\d{1,2}))?$/.exec(part);
+    if (!m) continue;
+    const qty = m[2] === undefined ? 1 : Number(m[2]);
+    if (qty < 1) continue;
+    merged.set(m[1], Math.min(99, (merged.get(m[1]) ?? 0) + qty));
+  }
+  return [...merged].map(([offerId, qty]) => ({ offerId, qty }));
+}
+
+export function telegramStartLink(botUsername: string, param: string): string {
+  return `https://t.me/${botUsername.replace(/^@/, "")}?startapp=${param}`;
+}
+
 export function shareUrl(siteOrigin: string, lang: string, value: string): string {
   return `${siteOrigin.replace(/\/+$/, "")}/${lang}/cart/import#c=${value}`;
 }
@@ -154,12 +188,18 @@ export interface ImportResult {
   missing: number;
 }
 
+/**
+ * `firstLaunch`: true only when this device had no stored lists at all before this session
+ * (owner rule 2026-10-17): then the shared list becomes the only list. Any earlier use of the
+ * app - even with an empty list - keeps the user's list and adds a separate "shared" one.
+ */
 export function importShared(
   s: CartsState,
   items: SharedItem[],
   catalog: Catalog,
   today: string,
   now: Date = new Date(),
+  firstLaunch = false,
 ): ImportResult {
   const key = importKeyOf(items);
   const existing = s.carts.find((c) => c.importKey === key);
@@ -182,7 +222,7 @@ export function importShared(
   if (!added) return { state: s, cartId: s.activeId, mode: "nothing", added: 0, missing };
 
   const active = activeCart(s);
-  if (active.cart.lines.length === 0) {
+  if (firstLaunch && s.carts.length === 1 && active.cart.lines.length === 0) {
     const carts = s.carts.map((c) =>
       c.id === active.id ? { ...c, importKey: key, cart: { ...cart, cards: c.cart.cards } } : c,
     );

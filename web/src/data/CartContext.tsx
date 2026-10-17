@@ -21,6 +21,7 @@ import {
   encodeShare,
   importShared,
   parseCarts,
+  type SharedItem,
   renameCart,
   shareUrl,
   switchCart,
@@ -76,16 +77,24 @@ export interface CartApi {
   renameList: (id: string, name: string) => void;
   /** Absolute link to the active list (page language `lang`, default "bg"), null when it is empty. */
   shareLink: (lang?: string) => string | null;
-  /** Imports a share value ("1.<id>-<qty>_..."); needs a loaded catalog (otherwise "nothing"). */
-  importFromLink: (value: string | null | undefined) => Promise<ImportResult>;
+  /** Imports a share value ("1.<id>-<qty>_...") or already decoded items; needs a loaded catalog (otherwise "nothing"). */
+  importFromLink: (value: string | SharedItem[] | null | undefined) => Promise<ImportResult>;
 }
 
 const CartCtx = createContext<CartApi | null>(null);
+
+/**
+ * Per storage: true until the first import/user action of this page load, and only when neither the
+ * v2 nor the v1 key existed before the very first read. A WeakMap (not a ref) so that StrictMode's
+ * double render, which reads again after our first write, cannot flip it.
+ */
+const firstLaunchByKv = new WeakMap<LocalKv, boolean>();
 
 /** Reads the stored lists; migrates the old single cart once (write v2, then drop v1). */
 function load(kv: LocalKv): CartsState {
   const raw = kv.get<unknown>(CARTS_KEY);
   const legacy = kv.get<unknown>(CART_KEY_V1);
+  if (!firstLaunchByKv.has(kv)) firstLaunchByKv.set(kv, raw === undefined && legacy === undefined);
   const state = parseCarts(raw, legacy);
   if (raw === undefined && legacy === undefined) {
     // Persist the fresh state so every tab shows the same list ids (actions target lists by id).
@@ -133,6 +142,8 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
         const raw = kv.get<unknown>(CARTS_KEY);
         const base = raw === undefined ? latest.current : parseCarts(raw);
         const next = op(base);
+        // Any user action or import ends the "first launch" for later imports in this session.
+        firstLaunchByKv.set(kv, false);
         latest.current = next;
         if (next !== base) kv.set(CARTS_KEY, next);
         out = next;
@@ -224,12 +235,12 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
   );
 
   const importFromLink = useCallback(
-    async (value: string | null | undefined): Promise<ImportResult> => {
-      const items = decodeShare(value);
+    async (value: string | SharedItem[] | null | undefined): Promise<ImportResult> => {
+      const items = Array.isArray(value) ? value : decodeShare(value);
       const holder: { result: ImportResult | null } = { result: null };
       if (catalog && items.length) {
         await act((s) => {
-          holder.result = importShared(s, items, catalog, today);
+          holder.result = importShared(s, items, catalog, today, new Date(), firstLaunchByKv.get(kv) === true);
           return holder.result.state;
         });
       }
@@ -243,7 +254,7 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
       track("cart_import", { mode: res.mode, added: res.added, missing: res.missing });
       return res;
     },
-    [act, catalog, today],
+    [act, catalog, today, kv],
   );
 
   const lists = useMemo<CartListInfo[]>(

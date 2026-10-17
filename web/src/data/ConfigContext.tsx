@@ -10,6 +10,7 @@ export const FALLBACK_CONFIG: AppConfig = {
   site_url: "",
   brochures: {},
   report_enabled: true,
+  telegram_bot: null,
 };
 
 const ConfigCtx = createContext<AppConfig>(FALLBACK_CONFIG);

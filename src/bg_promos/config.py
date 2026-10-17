@@ -63,6 +63,7 @@ class Settings:
     # ---- public Telegram bot @promoseubot (separate from the technical telegram_bot_token) ----
     promos_bot_token: str = ""
     bot_webapp_url: str = "https://promos.centerai.eu"
+    bot_username: str = ""
 
     @property
     def tz(self) -> ZoneInfo:
@@ -150,6 +151,7 @@ def load(path: str | os.PathLike[str] | None = None) -> Settings:
         bot_webapp_url=(
             cp["bot"].get("webapp_url", "").strip() if "bot" in cp else ""
         ) or defaults.bot_webapp_url,
+        bot_username=(cp["bot"].get("username", "").strip().lstrip("@") if "bot" in cp else ""),
         timezone=g.get("timezone", "Europe/Sofia"),
         contact=g.get("contact", ""),
         raw_retention_days=g.getint("raw_retention_days", fallback=14),

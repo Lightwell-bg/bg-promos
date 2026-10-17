@@ -117,6 +117,7 @@ def create_app(
                 "site_url": settings.site_url,
                 "brochures": dict(settings.brochure_urls),
                 "report_enabled": reports.enabled,
+                "telegram_bot": settings.bot_username or None,
             },
             headers={"Cache-Control": "no-cache"},
         )

@@ -5,8 +5,12 @@ import {
   activeCart,
   CARTS_VERSION,
   decodeShare,
+  decodeStartParam,
   deleteCart,
   encodeShare,
+  encodeStartParam,
+  START_PARAM_MAX,
+  telegramStartLink,
   importKeyOf,
   importShared,
   initialCarts,
@@ -25,6 +29,7 @@ const catalog = sampleCatalog();
 const NOW = new Date("2026-10-17T08:00:00Z");
 const A = IDS.lidlPromo;
 const B = IDS.billaPromo;
+const C0 = IDS.kauflandMultibuy;
 
 function cartOf(...entries: Array<[string, number]>): CartState {
   return entries.reduce((s, [id, q]) => addOffer(s, offerById(catalog, id), NOW, q), EMPTY_CART);
@@ -90,20 +95,91 @@ describe("share codec", () => {
   });
 });
 
+describe("Telegram start parameter", () => {
+  const lines = (n: number, qty = 1): CartState => {
+    const first = cartOf([A, 1]).lines[0];
+    return { ...EMPTY_CART, lines: Array.from({ length: n }, (_, i) => ({ ...first, qty, offerId: i.toString(16).padStart(12, "0") })) };
+  };
+
+  it("roundtrips ids and quantities; quantity 1 is omitted", () => {
+    const p = encodeStartParam(cartOf([A, 2], [B, 1]));
+    expect(p).toMatch(/^c1_[0-9a-f]{12}-2_[0-9a-f]{12}$/);
+    expect(p).toContain(`${B}`);
+    expect(p).not.toContain(`${B}-1`);
+    expect(decodeStartParam(p).sort((x, y) => x.offerId.localeCompare(y.offerId))).toEqual(
+      [
+        { offerId: A, qty: 2 },
+        { offerId: B, qty: 1 },
+      ].sort((x, y) => x.offerId.localeCompare(y.offerId)),
+    );
+  });
+
+  it("rejects wrong prefix and invalid characters", () => {
+    expect(decodeStartParam(`c2_${A}`)).toEqual([]);
+    expect(decodeStartParam(`${A}`)).toEqual([]);
+    expect(decodeStartParam(`c1_${A}.2`)).toEqual([]);
+    expect(decodeStartParam(`c1_${A}!`)).toEqual([]);
+    expect(decodeStartParam("")).toEqual([]);
+    expect(decodeStartParam(null)).toEqual([]);
+    expect(decodeStartParam("c1_" + "a".repeat(600))).toEqual([]);
+  });
+
+  it("skips bad parts and merges duplicates", () => {
+    expect(decodeStartParam(`c1_${A}-2_zzz_${A}-3_${B}-0`)).toEqual([{ offerId: A, qty: 5 }]);
+  });
+
+  it("empty list gives null", () => {
+    expect(encodeStartParam(EMPTY_CART)).toBeNull();
+  });
+
+  it("the 512-char limit: 39 plain lines fit, 40 do not", () => {
+    expect(START_PARAM_MAX).toBe(512);
+    const ok = encodeStartParam(lines(39));
+    expect(ok).not.toBeNull();
+    expect(ok?.length).toBeLessThanOrEqual(512);
+    expect(encodeStartParam(lines(40))).toBeNull();
+    // with quantities each line is longer
+    expect(encodeStartParam(lines(34, 2))).not.toBeNull();
+    expect(encodeStartParam(lines(35, 2))).toBeNull();
+  });
+
+  it("builds the t.me link", () => {
+    expect(telegramStartLink("promoseubot", "c1_x")).toBe("https://t.me/promoseubot?startapp=c1_x");
+    expect(telegramStartLink("@promoseubot", "c1_x")).toBe("https://t.me/promoseubot?startapp=c1_x");
+  });
+});
+
 describe("importShared", () => {
   const items = [
     { offerId: A, qty: 2 },
     { offerId: B, qty: 1 },
   ];
 
-  it("fills an empty active list", () => {
+  it("first launch with a single empty list: fills it", () => {
     const s = initialCarts(NOW);
-    const r = importShared(s, items, catalog, SAMPLE_TODAY, NOW);
+    const r = importShared(s, items, catalog, SAMPLE_TODAY, NOW, true);
     expect(r.mode).toBe("filled");
     expect(r.added).toBe(2);
     expect(r.missing).toBe(0);
     expect(r.state.carts).toHaveLength(1);
     expect(ids(activeCart(r.state).cart)).toEqual([A, B].sort());
+  });
+
+  it("not a first launch: even an empty own list is kept and a separate shared list is created", () => {
+    const s = initialCarts(NOW);
+    const r = importShared(s, items, catalog, SAMPLE_TODAY, new Date(NOW.getTime() + 1000), false);
+    expect(r.mode).toBe("created");
+    expect(r.state.carts).toHaveLength(2);
+    expect(r.state.carts[0].origin).toBe("own");
+    expect(r.state.carts[0].cart.lines).toHaveLength(0);
+    expect(activeCart(r.state).origin).toBe("shared");
+  });
+
+  it("first launch flag with an existing non-empty list still creates a separate list", () => {
+    const s = initialCarts(NOW, cartOf([C0, 1]));
+    const r = importShared(s, items, catalog, SAMPLE_TODAY, new Date(NOW.getTime() + 1000), true);
+    expect(r.mode).toBe("created");
+    expect(r.state.carts).toHaveLength(2);
   });
 
   it("creates a shared list and activates it when the active list is not empty", () => {
@@ -139,6 +215,7 @@ describe("importShared", () => {
       catalog,
       SAMPLE_TODAY,
       NOW,
+      true,
     );
     expect(r.mode).toBe("filled");
     expect(r.added).toBe(2);

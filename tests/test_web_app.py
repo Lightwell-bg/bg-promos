@@ -124,9 +124,11 @@ def test_config(seeded):
     assert body["ga4_id"] is None and body["report_enabled"] is False
     assert body["contact_email"] == "info@centerai.eu" and body["operator"] == "CenterAI"
     assert body["brochures"] == {"lidl": "https://example.test/lidl-brochure"}
-    configured, _, _ = make_client(dataclasses.replace(seeded, ga4_id="G-TEST123"))
+    assert body["telegram_bot"] is None
+    configured, _, _ = make_client(dataclasses.replace(seeded, ga4_id="G-TEST123", bot_username="promoseubot"))
     body = configured.get("/api/v1/config").json()
     assert body["ga4_id"] == "G-TEST123" and body["report_enabled"] is True
+    assert body["telegram_bot"] == "promoseubot"
 
 
 def test_no_docs_ui(seeded):
