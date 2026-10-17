@@ -126,7 +126,7 @@ describe("opening a shared link", () => {
 });
 
 describe("sharing and managing lists", () => {
-  it("the share button produces a link that decodes back to the active list", async () => {
+  it("the share button always shows the link panel (Telegram webviews have no share sheet)", async () => {
     let shared: ShareData | null = null;
     setSharer({
       async share(d): Promise<ShareResult> {
@@ -136,11 +136,16 @@ describe("sharing and managing lists", () => {
     });
     await renderWithCart(<Cart />, { cart: cartOf([A, 2], [B, 1]) });
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
-    expect(await screen.findByText("Връзката е копирана")).toBeInTheDocument();
-    const data = shared as unknown as ShareData;
-    expect(data.title).toBe("BG Promos");
-    expect(data.text).toBe("Моята количка");
-    const url = new URL(data.url);
+    // the panel is visible without any share/clipboard API call
+    expect(shared).toBeNull();
+    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    const tg = screen.getByRole("link", { name: "Изпрати в Telegram" }) as HTMLAnchorElement;
+    const tgUrl = new URL(tg.href);
+    expect(tgUrl.origin + tgUrl.pathname).toBe("https://t.me/share/url");
+    expect(tgUrl.searchParams.get("url")).toBe(input.value);
+    expect(tgUrl.searchParams.get("text")).toBe("Моята количка");
+    expect(screen.getByRole("button", { name: "Копирай връзката" })).toBeInTheDocument();
+    const url = new URL(input.value);
     expect(url.pathname).toBe("/bg/cart/import");
     expect(decodeShare(shareFromHash(url.hash)).sort((x, y) => x.offerId.localeCompare(y.offerId))).toEqual(
       [

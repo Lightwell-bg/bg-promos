@@ -15,7 +15,7 @@ import { conditionChips, formatEUR, priceModel } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
 import { setTitle } from "../platform/document";
-import { share } from "../platform/share";
+import { canNativeShare, copyText, share, telegramShareUrl } from "../platform/share";
 import styles from "./Cart.module.css";
 import page from "./Page.module.css";
 
@@ -57,6 +57,7 @@ export function Cart() {
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [note, setNote] = useState("");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [importNote, setImportNote] = useState<ImportNote | null>(() => noteOf(location.state));
@@ -78,13 +79,62 @@ export function Cart() {
     return () => clearTimeout(id);
   }, [note]);
 
-  async function onShare() {
+  // Always open a panel with the visible link: Telegram webviews often have no share sheet and
+  // deny the clipboard, so a silent navigator.share/clipboard attempt looked like "nothing happens".
+  function onShare() {
     const url = cart.shareLink(lang);
-    if (!url) return;
-    const result = await share({ title: t("app.name"), text: t("cart.shareText"), url });
-    if (result === "copied") setNote(t("cart.shareCopied"));
-    else if (result === "failed") setNote(t("cart.shareFailed"));
+    if (!url) {
+      setNote(t("cart.shareFailed"));
+      return;
+    }
+    setShareUrl(url);
   }
+
+  async function onCopy() {
+    if (!shareUrl) return;
+    setNote((await copyText(shareUrl)) ? t("cart.shareCopied") : t("cart.shareFailed"));
+  }
+
+  async function onSystemShare() {
+    if (!shareUrl) return;
+    const result = await share({ title: t("app.name"), text: t("cart.shareText"), url: shareUrl });
+    if (result === "copied") setNote(t("cart.shareCopied"));
+  }
+
+  const sharePanel = shareUrl && (
+    <div className={styles.sharePanel} role="region" aria-label={t("cart.sharePanelTitle")}>
+      <p className={styles.sharePanelTitle}>{t("cart.sharePanelTitle")}</p>
+      <input
+        className={styles.shareInput}
+        readOnly
+        value={shareUrl}
+        aria-label={t("cart.sharePanelTitle")}
+        onFocus={(e) => e.currentTarget.select()}
+      />
+      <p className={styles.shareHint}>{t("cart.shareHint")}</p>
+      <div className={styles.shareActions}>
+        <a
+          className={page.primaryBtn}
+          href={telegramShareUrl(shareUrl, t("cart.shareText"))}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {t("cart.shareTelegram")}
+        </a>
+        <button type="button" className={page.secondaryBtn} onClick={() => void onCopy()}>
+          {t("cart.shareCopy")}
+        </button>
+        {canNativeShare() && (
+          <button type="button" className={page.secondaryBtn} onClick={() => void onSystemShare()}>
+            {t("cart.shareSystem")}
+          </button>
+        )}
+        <button type="button" className={page.secondaryBtn} onClick={() => setShareUrl(null)}>
+          {t("cart.shareClose")}
+        </button>
+      </div>
+    </div>
+  );
 
   const listLabel = (l: (typeof cart.lists)[number]) =>
     l.name ?? (l.origin === "own" ? t("cart.listOwn") : t("cart.listShared", { date: sofiaDayMonth(l.createdAt) }));
@@ -353,7 +403,7 @@ export function Cart() {
             className={page.secondaryBtn}
             disabled={shareState === "too_many"}
             title={shareState === "too_many" ? t("cart.shareTooMany") : undefined}
-            onClick={() => void onShare()}
+            onClick={onShare}
           >
             {t("cart.share")}
           </button>
@@ -372,6 +422,7 @@ export function Cart() {
           {note}
         </p>
       )}
+      {sharePanel}
       {importBanner}
       {switcher}
 

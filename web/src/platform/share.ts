@@ -33,6 +33,46 @@ export const webSharer: Sharer = {
   },
 };
 
+/** True when the native share sheet exists (absent in many Telegram webviews). */
+export function canNativeShare(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.share === "function";
+}
+
+/**
+ * Copy text: async Clipboard API first, then the legacy execCommand path, which still works in
+ * webviews (Telegram Mini App) where the Clipboard API is missing or denied. Never throws.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Telegram's own "forward to a chat" page; opens the chat picker inside Telegram. */
+export function telegramShareUrl(url: string, text: string): string {
+  return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+}
+
 let sharer: Sharer = webSharer;
 
 export function setSharer(s: Sharer): void {
