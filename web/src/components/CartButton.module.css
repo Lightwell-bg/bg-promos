@@ -1,0 +1,38 @@
+.root {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.detail {
+  justify-content: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.add,
+.addWide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  border-radius: 999px;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+}
+
+.addWide {
+  padding: 0 18px;
+}
+
+.open {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+}

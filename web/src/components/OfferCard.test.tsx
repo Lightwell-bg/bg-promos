@@ -1,29 +1,52 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { beforeEach, describe, expect, it } from "vitest";
 import { IDS, offerById, sampleCatalog, SAMPLE_TODAY } from "../__fixtures__";
+import { CartProvider } from "../data/CartContext";
+import { CatalogProvider } from "../data/CatalogContext";
+import { CatalogStore } from "../data/catalogStore";
 import type { Lang } from "../domain/types";
 import { LangProvider } from "../i18n/LangContext";
+import { createLocalKv } from "../platform/localKv";
+import { createMemoryStorage } from "../platform/storage";
 import { OfferCard } from "./OfferCard";
 
 const cat = sampleCatalog();
 
+function Providers({ children, lang = "bg" }: { children: ReactNode; lang?: Lang }) {
+  const store = new CatalogStore({
+    storage: createMemoryStorage(),
+    fetchFn: () => Promise.reject(new Error("offline")),
+  });
+  return (
+    <MemoryRouter>
+      <LangProvider lang={lang}>
+        <CatalogProvider store={store}>
+          <CartProvider kv={createLocalKv()}>{children}</CartProvider>
+        </CatalogProvider>
+      </LangProvider>
+    </MemoryRouter>
+  );
+}
+
 function renderCard(id: string, lang: Lang = "bg") {
   const offer = offerById(cat, id);
   return render(
-    <MemoryRouter>
-      <LangProvider lang={lang}>
-        <OfferCard
-          offer={offer}
-          category={cat.categories.find((c) => c.id === offer.category)}
-          today={SAMPLE_TODAY}
-        />
-      </LangProvider>
-    </MemoryRouter>,
+    <Providers lang={lang}>
+      <OfferCard
+        offer={offer}
+        category={cat.categories.find((c) => c.id === offer.category)}
+        today={SAMPLE_TODAY}
+      />
+    </Providers>,
   );
 }
 
 const text = (el: HTMLElement) => (el.textContent ?? "").replace(/ /g, " ");
+
+beforeEach(() => window.localStorage.clear()); // cart writes are immediate: do not leak between tests
 
 describe("OfferCard", () => {
   it("multibuy shows the total with quantity, the per-item line and a condition chip", () => {
@@ -54,11 +77,9 @@ describe("OfferCard", () => {
     const offer = structuredClone(offerById(cat, IDS.lidlPlus));
     offer.no_card = { kind: "multibuy", program: null, min_qty: 2, total_cents: 378, per_item_cents: 189, discount_pct: null, text: null };
     const { container } = render(
-      <MemoryRouter>
-        <LangProvider lang="ru">
-          <OfferCard offer={offer} today={SAMPLE_TODAY} />
-        </LangProvider>
-      </MemoryRouter>,
+      <Providers lang="ru">
+        <OfferCard offer={offer} today={SAMPLE_TODAY} />
+      </Providers>,
     );
     expect(text(container)).toContain("Без карты: 3,78 € за 2 шт. (1,89 €/шт.)");
   });
@@ -89,5 +110,45 @@ describe("OfferCard", () => {
   it("marks the last day", () => {
     renderCard(IDS.endingToday);
     expect(screen.getByText("последен ден")).toBeInTheDocument();
+  });
+});
+
+describe("OfferCard add to cart", () => {
+  function Where() {
+    const l = useLocation();
+    return <output data-testid="where">{l.pathname}</output>;
+  }
+
+  it("the add button is outside the link, adds the offer and does not navigate", async () => {
+    const offer = offerById(cat, IDS.lidlPromo);
+    render(
+      <Providers>
+        <Routes>
+          <Route path="/" element={<OfferCard offer={offer} today={SAMPLE_TODAY} />} />
+          <Route path="*" element={<p>elsewhere</p>} />
+        </Routes>
+        <Where />
+      </Providers>,
+    );
+    const add = screen.getByRole("button", { name: "Добави в количката" });
+    expect(add.closest("a")).toBeNull();
+    await userEvent.click(add);
+    expect(screen.getByTestId("where")).toHaveTextContent("/");
+    expect(screen.queryByText("elsewhere")).toBeNull();
+    // now a stepper with the quantity
+    expect(screen.queryByRole("button", { name: "Добави в количката" })).toBeNull();
+    const group = screen.getByRole("group", { name: "Количество" });
+    expect(group).toHaveTextContent("1");
+    await userEvent.click(screen.getByRole("button", { name: "Увеличи количеството" }));
+    expect(screen.getByRole("group", { name: "Количество" })).toHaveTextContent("2");
+    // minus twice removes it again
+    await userEvent.click(screen.getByRole("button", { name: "Намали количеството" }));
+    await userEvent.click(screen.getByRole("button", { name: "Намали количеството" }));
+    expect(screen.getByRole("button", { name: "Добави в количката" })).toBeInTheDocument();
+  });
+
+  it("has a Russian label", () => {
+    renderCard(IDS.lidlPromo, "ru");
+    expect(screen.getByRole("button", { name: "В корзину" })).toBeInTheDocument();
   });
 });

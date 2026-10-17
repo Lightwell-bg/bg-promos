@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import logoFull from "../assets/logo-full.svg";
+import { useCart } from "../data/CartContext";
 import { useLang, useT } from "../i18n/LangContext";
-import { applyPageMeta, pageMeta } from "../seo/meta";
+import { setRobotsNoindex } from "../platform/document";
+import { applyPageMeta, isNoindexPath, pageMeta } from "../seo/meta";
 import styles from "./AppShell.module.css";
 import { ConsentBanner } from "./ConsentBanner";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { BrochureIcon, CatalogIcon, HomeIcon, SearchIcon } from "./Icons";
+import { BrochureIcon, CartIcon, CatalogIcon, HomeIcon, SearchIcon } from "./Icons";
 import { InstallHint } from "./InstallHint";
 import { LangSwitch } from "./LangSwitch";
 import { ReportDialog } from "./ReportDialog";
@@ -19,11 +21,13 @@ export function AppShell() {
   const lang = useLang();
   const { pathname } = useLocation();
   const [reporting, setReporting] = useState(false);
+  const { count } = useCart();
 
   // <title>, description and canonical follow the route (offer pages set their own title).
   useEffect(() => {
     const meta = pageMeta(lang, pathname);
     if (meta) applyPageMeta(meta, pathname.replace(/\/+$/, "") || `/${lang}`);
+    setRobotsNoindex(isNoindexPath(pathname));
   }, [lang, pathname]);
 
   const nav = [
@@ -31,6 +35,7 @@ export function AppShell() {
     { to: `/${lang}/catalog`, end: false, label: t("nav.catalog"), icon: <CatalogIcon /> },
     { to: `/${lang}/search`, end: false, label: t("nav.search"), icon: <SearchIcon /> },
     { to: `/${lang}/brochures`, end: false, label: t("nav.brochures"), icon: <BrochureIcon /> },
+    { to: `/${lang}/cart`, end: false, label: t("nav.cart"), icon: <CartIcon />, badge: count },
   ];
 
   return (
@@ -70,8 +75,15 @@ export function AppShell() {
             end={n.end}
             className={({ isActive }) => `${styles.tab} ${isActive ? styles.active : ""}`}
           >
-            {n.icon}
-            <span>{n.label}</span>
+            <span className={styles.iconWrap}>
+              {n.icon}
+              {n.badge ? (
+                <span className={styles.badge} data-testid="cart-badge">
+                  {n.badge > 99 ? "99+" : n.badge}
+                </span>
+              ) : null}
+            </span>
+            <span className={styles.label}>{n.label}</span>
           </NavLink>
         ))}
       </nav>

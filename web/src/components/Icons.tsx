@@ -46,6 +46,29 @@ export const BrochureIcon = () => (
     <path d="M9 8h6M9 12h6" />
   </Svg>
 );
+export const CartIcon = () => (
+  <Svg>
+    <circle cx="9" cy="20" r="1.5" />
+    <circle cx="18" cy="20" r="1.5" />
+    <path d="M2 3h3l2.6 11.2a2 2 0 002 1.5h8.2a2 2 0 002-1.5L21 7H6" />
+  </Svg>
+);
+export const PlusIcon = () => (
+  <Svg size={20}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
+export const MinusIcon = () => (
+  <Svg size={20}>
+    <path d="M5 12h14" />
+  </Svg>
+);
+export const TrashIcon = () => (
+  <Svg size={20}>
+    <path d="M4 7h16M10 11v6M14 11v6" />
+    <path d="M6 7l1 13h10l1-13M9 7V4h6v3" />
+  </Svg>
+);
 export const FilterIcon = () => (
   <Svg size={20}>
     <path d="M3 5h18M6 12h12M10 19h4" />

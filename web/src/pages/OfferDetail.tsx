@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useCanGoBack } from "../hooks/useNavDepth";
+import { CartButton } from "../components/CartButton";
 import { ChainBadge } from "../components/ChainBadge";
 import { EmptyState } from "../components/EmptyState";
 import { DetailSkeleton } from "../components/Skeleton";
@@ -89,6 +90,7 @@ export function OfferDetail() {
       </div>
 
       <PriceBlock offer={offer} variant="full" />
+      <CartButton offer={offer} variant="detail" />
 
       <dl className={styles.facts}>
         {offer.brand && (

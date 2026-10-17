@@ -3,6 +3,7 @@ import { validityLabel } from "../domain/dates";
 import type { CardMode } from "../domain/filters";
 import type { Category, Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
+import { CartButton } from "./CartButton";
 import { ChainBadge } from "./ChainBadge";
 import styles from "./OfferCard.module.css";
 import { OfferImage } from "./OfferImage";
@@ -35,6 +36,10 @@ export function OfferCard({ offer, category, today, rail, card }: Props) {
           </p>
         </div>
       </Link>
+      {/* Sibling of the link, not nested in it: a button inside <a> is invalid HTML and would navigate. */}
+      <div className={styles.cart}>
+        <CartButton offer={offer} />
+      </div>
     </article>
   );
 }

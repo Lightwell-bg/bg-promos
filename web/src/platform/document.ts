@@ -30,6 +30,21 @@ export function setMeta(meta: { description: string; canonicalHref: string }): v
   c.href = meta.canonicalHref;
 }
 
+/** Adds (noindex = true) or removes <meta name="robots" content="noindex">. */
+export function setRobotsNoindex(noindex: boolean): void {
+  let r = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
+  if (!noindex) {
+    r?.remove();
+    return;
+  }
+  if (!r) {
+    r = document.createElement("meta");
+    r.name = "robots";
+    document.head.appendChild(r);
+  }
+  r.content = "noindex";
+}
+
 export function reloadPage(): void {
   window.location.reload();
 }

@@ -1,13 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDS, sampleCatalog } from "../__fixtures__";
 import { AppRoutes } from "../App";
+import { CartProvider } from "../data/CartContext";
 import { CatalogProvider } from "../data/CatalogContext";
 import { CATALOG_KEY, CatalogStore } from "../data/catalogStore";
 import { ConfigProvider } from "../data/ConfigContext";
 import { NavDepthProvider } from "../hooks/useNavDepth";
+import { createLocalKv } from "../platform/localKv";
 import { prefs } from "../platform/prefs";
 import { createMemoryStorage } from "../platform/storage";
 
@@ -24,10 +26,12 @@ async function renderApp(entry: string) {
     <MemoryRouter initialEntries={[entry]}>
       <ConfigProvider>
         <CatalogProvider store={store}>
-          <NavDepthProvider>
-            <AppRoutes />
-          </NavDepthProvider>
-          <Where />
+          <CartProvider kv={createLocalKv()}>
+            <NavDepthProvider>
+              <AppRoutes />
+            </NavDepthProvider>
+            <Where />
+          </CartProvider>
         </CatalogProvider>
       </ConfigProvider>
     </MemoryRouter>,
@@ -37,6 +41,7 @@ async function renderApp(entry: string) {
 const where = () => screen.getByTestId("where").textContent;
 
 beforeEach(() => {
+  window.localStorage.clear(); // cart writes are immediate now: do not leak between tests
   vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
   prefs.remove("recentQueries");
   prefs.remove("lang");
@@ -61,6 +66,31 @@ describe("offer detail Back button", () => {
     await waitFor(() => expect(where()).toContain("/bg/offer/"));
     await userEvent.click(await screen.findByRole("button", { name: "Назад" }));
     await waitFor(() => expect(where()).toBe("/bg/catalog"));
+  });
+});
+
+describe("cart navigation", () => {
+  it("the bottom nav has a cart tab whose badge shows the item count", async () => {
+    await renderApp("/bg/catalog");
+    await screen.findAllByRole("article");
+    const nav = screen.getByRole("navigation", { name: "Основна навигация" });
+    const tab = within(nav).getByRole("link", { name: /Количка/ });
+    expect(tab).toHaveAttribute("href", "/bg/cart");
+    expect(within(nav).queryByTestId("cart-badge")).toBeNull();
+
+    const add = screen.getAllByRole("button", { name: "Добави в количката" })[0];
+    await userEvent.click(add);
+    expect(within(nav).getByTestId("cart-badge")).toHaveTextContent("1");
+    await userEvent.click(screen.getAllByRole("button", { name: "Увеличи количеството" })[0]);
+    expect(within(nav).getByTestId("cart-badge")).toHaveTextContent("2");
+  });
+
+  it("the cart page is noindex and the flag is removed on other pages", async () => {
+    await renderApp("/bg/cart");
+    await screen.findByText("Количката е празна");
+    await waitFor(() => expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute("content", "noindex"));
+    await userEvent.click(within(screen.getByRole("navigation", { name: "Основна навигация" })).getByRole("link", { name: "Търсене" }));
+    await waitFor(() => expect(document.head.querySelector('meta[name="robots"]')).toBeNull());
   });
 });
 

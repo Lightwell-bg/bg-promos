@@ -3,6 +3,7 @@ import { useLayoutEffect } from "react";
 import { AnalyticsGate } from "./components/AnalyticsGate";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { CartProvider } from "./data/CartContext";
 import { CatalogProvider } from "./data/CatalogContext";
 import { ConfigProvider } from "./data/ConfigContext";
 import type { Lang } from "./domain/types";
@@ -10,6 +11,7 @@ import { NavDepthProvider } from "./hooks/useNavDepth";
 import { detectLang, isLang } from "./i18n";
 import { LangProvider } from "./i18n/LangContext";
 import { Brochures } from "./pages/Brochures";
+import { Cart } from "./pages/Cart";
 import { Catalog } from "./pages/Catalog";
 import { Home } from "./pages/Home";
 import { Legal } from "./pages/Legal";
@@ -24,7 +26,7 @@ export function detectedLang(): Lang {
   return detectLang(prefs.get<string | null>("lang", null), browserLanguages());
 }
 
-const KNOWN_PAGES = new Set(["catalog", "search", "brochures", "offer", "legal", "c"]);
+const KNOWN_PAGES = new Set(["catalog", "search", "brochures", "cart", "offer", "legal", "c"]);
 
 /** Where a path with a missing or invalid language prefix should go (query kept by the caller). */
 export function redirectTarget(pathname: string, lang: Lang): string {
@@ -71,6 +73,7 @@ export function AppRoutes() {
         <Route path="c/:category" element={<Catalog />} />
         <Route path="search" element={<Search />} />
         <Route path="brochures" element={<Brochures />} />
+        <Route path="cart" element={<Cart />} />
         <Route path="offer/:id" element={<OfferDetail />} />
         <Route path="legal/:page" element={<Legal />} />
         <Route path="*" element={<UnknownUnderLang />} />
@@ -90,12 +93,14 @@ export function App() {
     <BrowserRouter>
       <ConfigProvider>
         <CatalogProvider>
-          <AnalyticsGate />
-          <NavDepthProvider>
-            <ErrorBoundary>
-              <AppRoutes />
-            </ErrorBoundary>
-          </NavDepthProvider>
+          <CartProvider>
+            <AnalyticsGate />
+            <NavDepthProvider>
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+            </NavDepthProvider>
+          </CartProvider>
         </CatalogProvider>
       </ConfigProvider>
     </BrowserRouter>

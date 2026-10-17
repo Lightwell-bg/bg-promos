@@ -231,6 +231,10 @@
 
 .select {
   flex: 1;
+  /* without min-width: 0 a long option label widens the page on 360 px screens */
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
   min-height: var(--tap);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

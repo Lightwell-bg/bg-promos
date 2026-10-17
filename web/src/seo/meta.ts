@@ -36,6 +36,11 @@ export function pageMeta(lang: Lang, pathname: string): PageMeta | null {
   return null;
 }
 
+/** Private pages that must not be indexed (not prerendered, not in the sitemap). */
+export function isNoindexPath(pathname: string): boolean {
+  return pathname.replace(/\/+$/, "").split("/")[2] === "cart";
+}
+
 /** Sets <title>, meta description and canonical for the current route. */
 export function applyPageMeta(meta: PageMeta, canonicalPath: string): void {
   setTitle(meta.title);
