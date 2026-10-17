@@ -13,7 +13,7 @@ const viteConfig = readFileSync(resolve(root, "vite.config.ts"), "utf8");
 const IMAGE_HOSTS = ["kaufland.media.schwarz", "imgproxy-retcat.assets.schwarz", "media.kaufland.com", "www.lidl.bg"];
 
 function directive(name: string): string[] {
-  const m = csp.match(new RegExp(`${name}\\s+([^;]+);`));
+  const m = csp.match(new RegExp(`${name}\\s+([^;"]+)[;"]`));
   return m ? m[1].trim().split(/\s+/) : [];
 }
 
@@ -27,6 +27,10 @@ describe("offer images", () => {
   it("takes over open pages immediately after an update", () => {
     expect(viteConfig).toMatch(/skipWaiting:\s*true/);
     expect(viteConfig).toMatch(/clientsClaim:\s*true/);
+  });
+
+  it("can be embedded only by itself and Telegram Web (mini app)", () => {
+    expect(directive("frame-ancestors")).toEqual(["'self'", "https://web.telegram.org", "https://*.telegram.org"]);
   });
 
   it.each(IMAGE_HOSTS)("%s is allowed by CSP img-src", (host) => {
