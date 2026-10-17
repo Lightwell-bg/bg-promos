@@ -60,6 +60,9 @@ class Settings:
     offers_urls: dict[str, str] = field(default_factory=dict)
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    # ---- public Telegram bot @promoseubot (separate from the technical telegram_bot_token) ----
+    promos_bot_token: str = ""
+    bot_webapp_url: str = "https://promos.centerai.eu"
 
     @property
     def tz(self) -> ZoneInfo:
@@ -143,6 +146,10 @@ def load(path: str | os.PathLike[str] | None = None) -> Settings:
         offers_urls=section("offers_urls"),
         telegram_bot_token=(os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip(),
         telegram_chat_id=(os.environ.get("TELEGRAM_CHAT_ID") or "").strip(),
+        promos_bot_token=(os.environ.get("PROMOS_BOT_TOKEN") or "").strip(),
+        bot_webapp_url=(
+            cp["bot"].get("webapp_url", "").strip() if "bot" in cp else ""
+        ) or defaults.bot_webapp_url,
         timezone=g.get("timezone", "Europe/Sofia"),
         contact=g.get("contact", ""),
         raw_retention_days=g.getint("raw_retention_days", fallback=14),

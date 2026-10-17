@@ -91,3 +91,7 @@
    ```
    0 * * * * cd /opt/bg-promos && docker compose run --rm -T collector collect --scheduled >> /opt/bg-promos/data/cron.log 2>&1
    ```
+6. Telegram-бот (необязательно): вписать `PROMOS_BOT_TOKEN` в `.env` и запустить (подробности в [BOT.md](BOT.md)):
+   ```bash
+   docker compose build bot && docker compose up -d bot && docker compose logs --tail 20 bot
+   ```

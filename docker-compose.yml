@@ -33,6 +33,23 @@ services:
       retries: 3
       start_period: 15s
 
+  # Public Telegram bot @promoseubot (long polling, no ports, no webhook). Empty
+  # PROMOS_BOT_TOKEN = exit 0 and stays stopped; crashes restart (on-failure).
+  # Only ONE polling instance per token may run: stop local runs first.
+  bot:
+    build: .
+    image: bg-promos-bot
+    env_file: .env
+    entrypoint: ["python", "-m", "bg_promos.bot"]
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # Static PWA (prerendered pages) + /api proxy to the api service. Listens on the host
   # loopback only; the host nginx (TLS, promos.centerai.eu) proxies everything to 127.0.0.1:8002.
   web:

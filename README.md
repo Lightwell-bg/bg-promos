@@ -172,6 +172,7 @@ Environment variables (`.env`, template in `.env.example`):
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
 | `BG_PROMOS_CONFIG` | Optional path to `config.ini` (not in `.env.example`; set by the Docker image to `/app/config.ini`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Stage 2: Telegram bot for error reports (empty = form disabled) |
+| `PROMOS_BOT_TOKEN` | Public bot @promoseubot (empty = bot disabled, exit 0); never the same as `TELEGRAM_BOT_TOKEN` |
 
 ```bash
 cp .env.example .env
@@ -285,6 +286,10 @@ Written atomically to `data/export/`: `offers_current.json`, `offers_upcoming.js
 ```
 
 The flat fields are shortcuts: `price_cents` and `discount_pct` are the **promo** price/discount only (`null` if there is no promo condition), plus `regular_price_cents` and `loyalty_*`. `best_price` is the cheapest per-unit condition among promo/loyalty/multibuy (`unit_price_cents` = `price_cents / min_qty`, rounded); if the offer has none of them but has a regular price, it is built from the regular price; otherwise `null`. For full detail read the `prices` list.
+
+## Telegram bot (@promoseubot)
+
+Public bot on aiogram 3 (long polling, no webhook/Nginx): `/start`, `/app`, `/install`, `/help`, opens the Mini App and shows PWA install instructions. Needs `PROMOS_BOT_TOKEN` in `.env` (token from @BotFather; not the technical `TELEGRAM_BOT_TOKEN`) and `[bot] webapp_url` in `config.ini`. Run: `python -m bg_promos.bot` locally or `docker compose build bot && docker compose up -d bot` on the VPS. Only one polling instance per token. Details: [docs/BOT.md](docs/BOT.md).
 
 ## Tests
 

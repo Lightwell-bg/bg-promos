@@ -172,6 +172,7 @@ pip install -r requirements-dev.txt && pip install -e .
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (по умолчанию `INFO`) |
 | `BG_PROMOS_CONFIG` | Необязательный путь к `config.ini` (нет в `.env.example`; Docker-образ ставит `/app/config.ini`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Этап 2: Telegram-бот для сообщений об ошибках (пусто = форма отключена) |
+| `PROMOS_BOT_TOKEN` | Публичный бот @promoseubot (пусто = бот отключён, код выхода 0); никогда не совпадает с `TELEGRAM_BOT_TOKEN` |
 
 ```bash
 cp .env.example .env
@@ -285,6 +286,10 @@ python -m bg_promos --config /path/config.ini stats
 ```
 
 Плоские поля - сокращения: `price_cents` и `discount_pct` - только **акционная** (promo) цена и скидка (`null`, если promo-условия нет), а также `regular_price_cents` и `loyalty_*`. `best_price` - самое дешёвое условие в пересчёте на штуку среди promo/loyalty/multibuy (`unit_price_cents` = `price_cents / min_qty`, округлено); если их нет, но есть regular - строится из regular; иначе `null`. Полную картину смотрите в списке `prices`.
+
+## Telegram-бот (@promoseubot)
+
+Публичный бот на aiogram 3 (long polling, без вебхука и Nginx): `/start`, `/app`, `/install`, `/help`, открывает Mini App и показывает инструкции по установке PWA. Нужны `PROMOS_BOT_TOKEN` в `.env` (токен из @BotFather; это не технический `TELEGRAM_BOT_TOKEN`) и `[bot] webapp_url` в `config.ini`. Запуск: `python -m bg_promos.bot` локально или `docker compose build bot && docker compose up -d bot` на VPS. На один токен допускается только один экземпляр с polling. Подробности: [docs/BOT.md](docs/BOT.md).
 
 ## Тесты
 
