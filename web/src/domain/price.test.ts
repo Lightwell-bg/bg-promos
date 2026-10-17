@@ -113,6 +113,16 @@ describe("priceModel", () => {
   });
 });
 
+describe("priceModel with card=without", () => {
+  it("shows the no-card condition as the main price, without a no-card line", () => {
+    const m = priceModel(get(IDS.lidlPlus), "without");
+    expect(m.mainCents).toBe(159);
+    expect(m.noCard).toBeNull();
+    expect(m.chips.map((c) => c.key)).toEqual(["cond.regular"]);
+    expect(priceModel(get(IDS.lidlPlus), "all").mainCents).toBe(99);
+  });
+});
+
 describe("conditionChips", () => {
   it("covers every program label key", () => {
     const base = get(IDS.lidlPlus).best!;

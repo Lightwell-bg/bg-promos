@@ -27,7 +27,8 @@ from .pricing import _condition, derive
 log = logging.getLogger(__name__)
 
 CATALOG_VERSION = 1
-CHAIN_NAMES = {"lidl": "Lidl", "kaufland": "Kaufland", "billa": "BILLA"}
+STALE_DB_REASON = "database unavailable"
+CHAIN_NAMES ={"lidl": "Lidl", "kaufland": "Kaufland", "billa": "BILLA"}
 
 # (run ids per chain, Sofia date, current UTC hour "YYYY-MM-DDTHH"). The hour makes
 # time-based chain ``stale`` flags refresh at least hourly.
@@ -182,12 +183,33 @@ class CatalogCache:
         self._key: CacheKey | None = None
         self._value: tuple[bytes, bytes, str] | None = None
         self._content_hash: str | None = None
+        self._fallback: tuple[tuple[str | None, str], tuple[bytes, bytes, str]] | None = None
 
     def current_key(self, now: datetime) -> CacheKey:
         chains = enabled_chains(self.settings)
         today = _aware(now).astimezone(self.settings.tz).date().isoformat()
         with read_storage(self.settings.db_path) as storage:
             return (_run_ids(storage, chains), today, _utc_hour(now))
+
+    def _degraded(self, now: datetime) -> tuple[bytes, bytes, str]:
+        """Copy of the last good payload with every chain marked stale and a new ETag.
+
+        Called with the lock held and ``self._value`` set. The good value itself is left
+        untouched, so a recovered database is served normally again.
+        """
+        today = now.astimezone(self.settings.tz).date().isoformat()
+        stamp = (self._content_hash, today)
+        if self._fallback is not None and self._fallback[0] == stamp:
+            return self._fallback[1]
+        catalog = json.loads(self._value[0])
+        catalog["today"] = today
+        for info in catalog.get("chains", {}).values():
+            info["stale"] = True
+            info["stale_reason"] = STALE_DB_REASON
+        payload = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        value = (payload, gzip.compress(payload, compresslevel=6, mtime=0), _etag(hashlib.sha1(payload).hexdigest()))
+        self._fallback = (stamp, value)
+        return value
 
     def get(self, now: datetime | None = None) -> tuple[bytes, bytes, str]:
         now = _aware(now)
@@ -199,8 +221,8 @@ class CatalogCache:
                 catalog, key = _build(self.settings, now)
             except sqlite3.Error:
                 if self._value is not None:
-                    log.exception("catalog rebuild failed; serving the previous copy")
-                    return self._value
+                    log.exception("catalog rebuild failed; serving the previous copy marked stale")
+                    return self._degraded(now)
                 raise
             content_hash = _content_hash(catalog)
             if self._value is not None and content_hash == self._content_hash:

@@ -1,3 +1,4 @@
+import type { CardMode } from "../domain/filters";
 import { formatEUR, priceModel } from "../domain/price";
 import type { Offer } from "../domain/types";
 import { useT } from "../i18n/LangContext";
@@ -7,12 +8,14 @@ interface Props {
   offer: Offer;
   /** "full" adds the savings line (offer detail). */
   variant?: "compact" | "full";
+  /** Catalog card filter: "without" shows the no-card condition as the main price. */
+  card?: CardMode;
 }
 
 /** Formats the server-derived price data; never computes prices itself. */
-export function PriceBlock({ offer, variant = "compact" }: Props) {
+export function PriceBlock({ offer, variant = "compact", card = "all" }: Props) {
   const t = useT();
-  const m = priceModel(offer);
+  const m = priceModel(offer, card);
   if (m.mainCents == null) {
     return <p className={styles.muted}>{t("price.none")}</p>;
   }

@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { navigationHandler } from "./src/sw/navigationHandler";
 
 const apiProxy = {
   "/api": { target: "http://127.0.0.1:8001", changeOrigin: true },
@@ -43,24 +44,9 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: ({ request, url }) => request.mode === "navigate" && !url.pathname.startsWith("/api/"),
-            handler: "NetworkFirst",
-            options: {
-              // New name: the old "pages" cache (stale HTML from earlier builds) is never read again.
-              cacheName: "pages-v2",
-              networkTimeoutSeconds: 4,
-              plugins: [
-                {
-                  // No long-lived pages cache: stale prerendered HTML would reference hashed
-                  // assets that a newer deploy has already deleted.
-                  cacheWillUpdate: async () => null,
-                },
-                {
-                  // Offline and the page was never visited: fall back to the precached app shell.
-                  handlerDidError: async () =>
-                    (await caches.match("/index.html", { ignoreSearch: true })) ?? Response.error(),
-                },
-              ],
-            },
+            // Network with a 4 s timeout; precached /index.html on timeout, error or HTTP >= 500.
+            // Serialised into sw.js via toString(), see src/sw/navigationHandler.ts.
+            handler: navigationHandler,
           },
           {
             urlPattern: ({ url }) =>

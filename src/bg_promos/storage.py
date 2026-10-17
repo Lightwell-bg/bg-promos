@@ -179,6 +179,18 @@ class Storage:
         content_hash: str | None = None,
         error: str | None = None,
     ) -> None:
+        with self.conn:
+            self._finish_run_sql(run_id, status, offers_count, content_hash, error)
+
+    def _finish_run_sql(
+        self,
+        run_id: int,
+        status: str,
+        offers_count: int | None,
+        content_hash: str | None,
+        error: str | None,
+    ) -> None:
+        """Update the run row without committing (the caller owns the transaction)."""
         row = self.conn.execute("SELECT chain FROM scrape_runs WHERE id = ?", (run_id,)).fetchone()
         changed = None
         if content_hash and row:
@@ -188,12 +200,11 @@ class Storage:
                 (row["chain"], run_id),
             ).fetchone()
             changed = int(prev is None or prev["content_hash"] != content_hash)
-        with self.conn:
-            self.conn.execute(
-                "UPDATE scrape_runs SET finished_at = ?, status = ?, offers_count = ?, "
-                "content_hash = ?, content_changed = ?, error = ? WHERE id = ?",
-                (utcnow(), status, offers_count, content_hash, changed, error, run_id),
-            )
+        self.conn.execute(
+            "UPDATE scrape_runs SET finished_at = ?, status = ?, offers_count = ?, "
+            "content_hash = ?, content_changed = ?, error = ? WHERE id = ?",
+            (utcnow(), status, offers_count, content_hash, changed, error, run_id),
+        )
 
     def recent_ok_counts(self, chain: str, limit: int) -> list[int]:
         rows = self.conn.execute(
@@ -226,19 +237,40 @@ class Storage:
 
     def save_offers(self, run_id: int, chain: str, offers: Iterable[Offer]) -> dict[str, int]:
         """Upsert a run's offers in one transaction. Returns counters."""
+        with self.conn:
+            return self._save_offers_sql(run_id, chain, offers)
+
+    def save_offers_and_finish(
+        self,
+        run_id: int,
+        chain: str,
+        offers: Iterable[Offer],
+        content_hash: str | None,
+    ) -> dict[str, int]:
+        """Save offers and mark the run ``ok`` in ONE transaction.
+
+        Any failure rolls everything back, so the previous successful snapshot stays intact.
+        """
+        offers = list(offers)
+        with self.conn:
+            stats = self._save_offers_sql(run_id, chain, offers)
+            self._finish_run_sql(run_id, "ok", len(offers), content_hash, None)
+        return stats
+
+    def _save_offers_sql(self, run_id: int, chain: str, offers: Iterable[Offer]) -> dict[str, int]:
+        """Upsert offers without committing (the caller owns the transaction)."""
         now = utcnow()
         stats = {"offers": 0, "new_offers": 0, "new_products": 0, "price_changes": 0}
-        with self.conn:
-            for o in offers:
-                if o.chain != chain:
-                    raise ValueError(f"offer of chain {o.chain!r} saved under {chain!r}")
-                product_id, new_product = self._upsert_product(o, now)
-                offer_id, new_offer = self._upsert_offer(o, product_id, run_id, now)
-                self._replace_prices(offer_id, o.prices)
-                stats["price_changes"] += self._observe(product_id, offer_id, run_id, now, o.prices, new_offer)
-                stats["offers"] += 1
-                stats["new_offers"] += int(new_offer)
-                stats["new_products"] += int(new_product)
+        for o in offers:
+            if o.chain != chain:
+                raise ValueError(f"offer of chain {o.chain!r} saved under {chain!r}")
+            product_id, new_product = self._upsert_product(o, now)
+            offer_id, new_offer = self._upsert_offer(o, product_id, run_id, now)
+            self._replace_prices(offer_id, o.prices)
+            stats["price_changes"] += self._observe(product_id, offer_id, run_id, now, o.prices, new_offer)
+            stats["offers"] += 1
+            stats["new_offers"] += int(new_offer)
+            stats["new_products"] += int(new_product)
         return stats
 
     def _upsert_product(self, o: Offer, now: str) -> tuple[int, bool]:

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCanGoBack } from "../hooks/useNavDepth";
 import { ChainBadge } from "../components/ChainBadge";
 import { EmptyState } from "../components/EmptyState";
 import { DetailSkeleton } from "../components/Skeleton";
@@ -25,10 +26,9 @@ export function OfferDetail() {
   const t = useT();
   const lang = useLang();
   const navigate = useNavigate();
-  const location = useLocation();
-  // The first entry of a session has the key "default": there is nothing in-app to go back to.
-  const hasInAppHistory = location.key !== "default";
-  const goBack = () => (hasInAppHistory ? navigate(-1) : navigate(`/${lang}/catalog`));
+  const canGoBack = useCanGoBack();
+  // Direct entry (also after a language switch, which replaces the entry): go to the catalog.
+  const goBack = () => (canGoBack() ? navigate(-1) : navigate(`/${lang}/catalog`));
   const { catalog, offers, today, state } = useCatalog();
   const [reporting, setReporting] = useState(false);
   const [note, setNote] = useState("");

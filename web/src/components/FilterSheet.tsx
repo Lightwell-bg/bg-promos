@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import {
   centsToEuroParam,
   DISC_OPTIONS,
@@ -10,7 +10,7 @@ import {
 } from "../domain/filters";
 import { CHAIN_IDS, CHAIN_NAMES, type Category, type ChainId } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
-import { onEscape } from "../platform/lifecycle";
+import { useModal } from "../hooks/useModal";
 import { CloseIcon } from "./Icons";
 import dialog from "./Dialog.module.css";
 import styles from "./FilterSheet.module.css";
@@ -36,7 +36,8 @@ export function FilterSheet({ filters, categories, onApply, onClose, hideCategor
   const [pmin, setPmin] = useState(filters.pmin != null ? centsToEuroParam(filters.pmin) : "");
   const [pmax, setPmax] = useState(filters.pmax != null ? centsToEuroParam(filters.pmax) : "");
 
-  useEffect(() => onEscape(onClose), [onClose]);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useModal(dialogRef, onClose);
 
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -74,6 +75,7 @@ export function FilterSheet({ filters, categories, onApply, onClose, hideCategor
   return (
     <div className={dialog.backdrop} onClick={onClose}>
       <div
+        ref={dialogRef}
         className={dialog.dialog}
         role="dialog"
         aria-modal="true"

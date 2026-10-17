@@ -1,3 +1,4 @@
+import { effectiveSavings, effectiveCondition, type CardMode } from "./filters";
 import type { Offer, PriceCondition, Program, UnitPrice } from "./types";
 
 const NBSP = " ";
@@ -65,8 +66,12 @@ export interface PriceModel {
   savingsPerItemCents: number | null;
 }
 
-export function priceModel(offer: Offer): PriceModel {
-  const best = offer.best;
+/**
+ * `card` selects the condition shown as the main price (see effectiveCondition):
+ * with "without" the cheapest no-card condition is the main price.
+ */
+export function priceModel(offer: Offer, card: CardMode = "all"): PriceModel {
+  const best = effectiveCondition(offer, card) ?? offer.best;
   if (!best) {
     return {
       mainCents: null,
@@ -112,6 +117,6 @@ export function priceModel(offer: Offer): PriceModel {
     noCard,
     unitText: offer.unit_price ? formatUnitPrice(offer.unit_price) : null,
     unitComputed: offer.unit_price?.source === "computed",
-    savingsPerItemCents: offer.savings_per_item_cents,
+    savingsPerItemCents: best === offer.best ? offer.savings_per_item_cents : effectiveSavings(offer, card),
   };
 }

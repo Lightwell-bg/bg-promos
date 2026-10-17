@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { onForeground } from "./lifecycle";
 import { prefs } from "./prefs";
 
 export type ConsentChoice = "granted" | "denied";
@@ -26,14 +27,46 @@ export function readConsent(now: number = Date.now()): ConsentRecord | null {
 const listeners = new Set<() => void>();
 let snapshot: ConsentRecord | null | undefined;
 
+/** The snapshot is re-checked for expiry on every read (the reference stays stable until it changes). */
 function getSnapshot(): ConsentRecord | null {
   if (snapshot === undefined) snapshot = readConsent();
+  else if (snapshot && Date.now() - snapshot.at > CONSENT_TTL_MS) snapshot = null;
   return snapshot;
 }
 
+function notifyAll(): void {
+  listeners.forEach((l) => l());
+}
+
+/** Foreground / late prefs preload: re-evaluate expiry and tell subscribers if it changed. */
+function revalidate(): void {
+  const before = snapshot;
+  const after = getSnapshot();
+  if (before !== after) notifyAll();
+}
+
+let teardown: (() => void) | null = null;
+
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
-  return () => listeners.delete(cb);
+  if (!teardown) {
+    const offForeground = onForeground(revalidate);
+    const offPrefs = prefs.subscribe(() => {
+      snapshot = undefined;
+      notifyAll();
+    });
+    teardown = () => {
+      offForeground();
+      offPrefs();
+    };
+  }
+  return () => {
+    listeners.delete(cb);
+    if (listeners.size === 0 && teardown) {
+      teardown();
+      teardown = null;
+    }
+  };
 }
 
 /** Stores the choice with a timestamp (platform storage) and notifies subscribers. */

@@ -1,5 +1,5 @@
 import { daysLeft, status } from "./dates";
-import { CHAIN_IDS, type ChainId, type Offer } from "./types";
+import { CHAIN_IDS, type ChainId, type Offer, type PriceCondition } from "./types";
 
 export type SortKey = "discount" | "price" | "savings" | "ending" | "store";
 export type CardMode = "all" | "without" | "only";
@@ -50,16 +50,41 @@ function cmpNullable(a: number | null | undefined, b: number | null | undefined,
   return (a - b) * dir;
 }
 
-export function compareOffers(sort: SortKey): (a: Offer, b: Offer) => number {
+/**
+ * The price condition the user is looking at under the card filter:
+ * - "without": the cheapest condition needing no program (best when it needs none, else no_card);
+ *   null when only a card price is known;
+ * - "only" / "all": the best condition.
+ */
+export function effectiveCondition(offer: Offer, card: CardMode = "all"): PriceCondition | null {
+  const best = offer.best;
+  if (card === "without") {
+    if (best && !best.program) return best;
+    return offer.no_card ?? null;
+  }
+  return best;
+}
+
+/** Savings per item for the effective condition (regular − per item); server value for best. */
+export function effectiveSavings(offer: Offer, card: CardMode = "all"): number | null {
+  const c = effectiveCondition(offer, card);
+  if (!c) return null;
+  if (c === offer.best) return offer.savings_per_item_cents;
+  if (offer.regular_cents == null) return null;
+  return offer.regular_cents - c.per_item_cents;
+}
+
+export function compareOffers(sort: SortKey, card: CardMode = "all"): (a: Offer, b: Offer) => number {
   const byDiscount = (a: Offer, b: Offer) =>
-    cmpNullable(a.best?.discount_pct, b.best?.discount_pct, -1) ||
-    cmpNullable(a.savings_per_item_cents, b.savings_per_item_cents, -1);
+    cmpNullable(effectiveCondition(a, card)?.discount_pct, effectiveCondition(b, card)?.discount_pct, -1) ||
+    cmpNullable(effectiveSavings(a, card), effectiveSavings(b, card), -1);
   switch (sort) {
     case "price":
       // per-item only: a multibuy total_cents is never comparable to a single price
-      return (a, b) => cmpNullable(a.best?.per_item_cents, b.best?.per_item_cents, 1);
+      return (a, b) =>
+        cmpNullable(effectiveCondition(a, card)?.per_item_cents, effectiveCondition(b, card)?.per_item_cents, 1);
     case "savings":
-      return (a, b) => cmpNullable(a.savings_per_item_cents, b.savings_per_item_cents, -1);
+      return (a, b) => cmpNullable(effectiveSavings(a, card), effectiveSavings(b, card), -1);
     case "ending":
       return (a, b) => {
         const an = a.valid_to;
@@ -77,9 +102,9 @@ export function compareOffers(sort: SortKey): (a: Offer, b: Offer) => number {
   }
 }
 
-export function sortOffers(offers: Offer[], sort: SortKey): Offer[] {
+export function sortOffers(offers: Offer[], sort: SortKey, card: CardMode = "all"): Offer[] {
   // Array.prototype.sort is stable: ties keep catalog order.
-  return [...offers].sort(compareOffers(sort));
+  return [...offers].sort(compareOffers(sort, card));
 }
 
 /**
@@ -94,6 +119,7 @@ export function filterOffers(
 ): Offer[] {
   const out = offers.filter((o) => {
     const st = status(o, today);
+    const eff = effectiveCondition(o, f.card);
     if (st === "ended") return false;
     if (f.when === "now" && st !== "active") return false;
     if (f.when === "upcoming" && st !== "upcoming") return false;
@@ -101,16 +127,17 @@ export function filterOffers(
     if (f.cats.length && !f.cats.includes(o.category)) return false;
     if (matchIds && !matchIds.has(o.id)) return false;
 
-    const per = o.best?.per_item_cents ?? null;
+    // "without card": buyable without a card (best needs none, or a no-card price exists).
+    if (f.card === "without" && eff == null) return false;
+    // "only card": the best price needs a loyalty program.
+    if (f.card === "only" && !o.best?.program) return false;
+
+    // Price and discount are judged on the effective condition (per-item only, never total).
+    const per = eff?.per_item_cents ?? null;
     if (f.pmin != null && (per == null || per < f.pmin)) return false;
     if (f.pmax != null && (per == null || per > f.pmax)) return false;
 
-    if (f.disc > 0 && (o.best?.discount_pct ?? -1) < f.disc) return false;
-
-    // "without card": buyable without a card, i.e. the best price needs none or a no-card price exists.
-    if (f.card === "without" && o.best?.program && o.no_card == null) return false;
-    // "only card": the best price needs a loyalty program.
-    if (f.card === "only" && !o.best?.program) return false;
+    if (f.disc > 0 && (eff?.discount_pct ?? -1) < f.disc) return false;
 
     if (f.ends > 0) {
       const left = daysLeft(o, today);
@@ -118,7 +145,7 @@ export function filterOffers(
     }
     return true;
   });
-  return sortOffers(out, f.sort);
+  return sortOffers(out, f.sort, f.card);
 }
 
 // ---- URL query <-> Filters ------------------------------------------------

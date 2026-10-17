@@ -6,6 +6,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CatalogProvider } from "./data/CatalogContext";
 import { ConfigProvider } from "./data/ConfigContext";
 import type { Lang } from "./domain/types";
+import { NavDepthProvider } from "./hooks/useNavDepth";
 import { detectLang, isLang } from "./i18n";
 import { LangProvider } from "./i18n/LangContext";
 import { Brochures } from "./pages/Brochures";
@@ -90,9 +91,11 @@ export function App() {
       <ConfigProvider>
         <CatalogProvider>
           <AnalyticsGate />
-          <ErrorBoundary>
-            <AppRoutes />
-          </ErrorBoundary>
+          <NavDepthProvider>
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
+          </NavDepthProvider>
         </CatalogProvider>
       </ConfigProvider>
     </BrowserRouter>

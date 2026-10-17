@@ -195,18 +195,6 @@ def purge_raw(raw_dir: Path, retention_days: int, now_utc: datetime) -> int:
     return removed
 
 
-def _is_new_baseline(storage: Storage, chain: str, count: int, current_run_id: int) -> bool:
-    """True when the last 2 finished runs were both suspicious with counts within +-10% of ``count``."""
-    prev = [r for r in storage.recent_runs(chain, 3) if r["id"] != current_run_id][:2]
-    if len(prev) < 2:
-        return False
-    for r in prev:
-        n = r["offers_count"]
-        if r["status"] != "suspicious" or not n or abs(n - count) > 0.1 * count:
-            return False
-    return True
-
-
 def run_chain(
     source: Source,
     storage: Storage,
@@ -232,7 +220,6 @@ def run_chain(
         count = len(offers)
 
         problem = None
-        ratio_only = False
         minimum = settings.chain(chain).min_expected_offers
         if count < minimum:
             problem = f"only {count} offers, expected at least {minimum}"
@@ -241,14 +228,10 @@ def run_chain(
             if history:
                 median = statistics.median(history)
                 if count < settings.min_ratio * median:
-                    ratio_only = True
                     problem = (
                         f"{count} offers is below {settings.min_ratio:.0%} of the median "
                         f"{median:g} of the last {len(history)} good runs"
                     )
-        if problem and ratio_only and _is_new_baseline(storage, chain, count, run_id):
-            log.warning("%s: accepting new baseline of %s offers (%s)", chain, count, problem)
-            problem = None
         if problem and accept_suspicious and count > 0:
             log.warning("%s: --accept-suspicious: saving %s offers despite: %s", chain, count, problem)
             problem = None
@@ -257,8 +240,7 @@ def run_chain(
             storage.finish_run(run_id, "suspicious", count, content_hash, problem)
             return "suspicious"
 
-        stats = storage.save_offers(run_id, chain, offers)
-        storage.finish_run(run_id, "ok", count, content_hash)
+        stats = storage.save_offers_and_finish(run_id, chain, offers, content_hash)
         log.info("%s: ok, %s", chain, stats)
         return "ok"
     except Exception as exc:  # one chain's failure must not stop the others

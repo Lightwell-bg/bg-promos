@@ -170,6 +170,47 @@ def test_fetch_skips_failing_upcoming_document():
     assert [d.url for d in docs] == ["https://x.test/week"]
 
 
+@pytest.mark.parametrize(
+    "tag,program", [("Само с Billa Card", "billa_card"), ("Само с Billa App", "billa_app")]
+)
+def test_multipack_with_loyalty_program(tag, program):
+    html = _multipack_page(
+        f"{tag} - Мултипак оферта 1+1 Тест Продукт 500 г Цена за 1 бр. 1,99 € "
+        "Цена за 2 бр. без отстъпка 3,98 € Цена за 2 бр. с отстъпка 1,99 €"
+    )
+    [o] = parse_brochure(html)
+    m = cond(o, "multibuy")
+    assert (m.program, m.min_qty, m.price_cents) == (program, 2, 199)
+    assert o.source_key == f"{o.product_ref}:{program}"
+
+
+def test_multipack_without_program_has_no_program():
+    html = _multipack_page(
+        "Кинг оферти - Мултипак оферта 1+1 Тест Продукт 500 г Цена за 1 бр. 1,99 € "
+        "Цена за 2 бр. без отстъпка 3,98 € Цена за 2 бр. с отстъпка 1,99 €"
+    )
+    [o] = parse_brochure(html)
+    assert cond(o, "multibuy").program is None
+
+
+def test_fetch_second_url_server_error_or_timeout_fails_run():
+    import httpx
+
+    def server_error(request):
+        return httpx.Response(500 if request.url.path == "/upcoming" else 200, text="<html></html>")
+
+    with pytest.raises(httpx.HTTPStatusError):
+        _fetch(server_error, ["https://x.test/week", "https://x.test/upcoming"])
+
+    def timeout(request):
+        if request.url.path == "/upcoming":
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, text="<html></html>")
+
+    with pytest.raises(httpx.ReadTimeout):
+        _fetch(timeout, ["https://x.test/week", "https://x.test/upcoming"])
+
+
 def test_fetch_first_url_error_and_block_propagate():
     import httpx
 

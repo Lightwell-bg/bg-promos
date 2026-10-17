@@ -112,29 +112,44 @@ def test_suspicious_run_records_offers_count(settings):
     assert (last["status"], last["offers_count"]) == ("suspicious", 1)
 
 
-def test_new_baseline_accepted_after_two_similar_suspicious_runs(settings, caplog):
+def test_suspicious_stays_suspicious_without_manual_accept(settings):
     settings.chains["lidl"].min_expected_offers = 1
     for _ in range(3):
         assert run_collect(settings, [FakeSource("lidl", 10)]) == 0
-    assert run_collect(settings, [FakeSource("lidl", 5)]) == 1
-    assert run_collect(settings, [FakeSource("lidl", 5)]) == 1
-    with caplog.at_level("WARNING"):
-        assert run_collect(settings, [FakeSource("lidl", 5)]) == 0
-    assert "accepting new baseline" in caplog.text
-    assert [r["status"] for r in runs(settings, "lidl")][-3:] == ["suspicious", "suspicious", "ok"]
-
-
-def test_new_baseline_not_accepted_when_counts_differ_or_min_expected_fails(settings):
-    settings.chains["lidl"].min_expected_offers = 1
-    for _ in range(3):
-        run_collect(settings, [FakeSource("lidl", 10)])
-    run_collect(settings, [FakeSource("lidl", 3)])
-    run_collect(settings, [FakeSource("lidl", 5)])
-    assert run_collect(settings, [FakeSource("lidl", 5)]) == 1  # previous counts 3 and 5 are not within 10 %
+    for _ in range(4):  # repeated similar low counts are never auto-accepted
+        assert run_collect(settings, [FakeSource("lidl", 5)]) == 1
+    assert [r["status"] for r in runs(settings, "lidl")][-4:] == ["suspicious"] * 4
+    with Storage(settings.db_path) as st:
+        assert len(st.offers_of_last_success("lidl")) == 10
+    assert collect(settings, sources={"lidl": FakeSource("lidl", 5)}, now=NOW, accept_suspicious=True) == 0
+    assert runs(settings, "lidl")[-1]["status"] == "ok"
     settings.chains["kaufland"].min_expected_offers = 5
     for _ in range(3):
-        assert run_collect(settings, [FakeSource("kaufland", 1)]) == 1  # min_expected is never relaxed
+        assert run_collect(settings, [FakeSource("kaufland", 1)]) == 1
     assert runs(settings, "kaufland")[-1]["status"] == "suspicious"
+
+
+def test_failure_after_offers_written_rolls_back_and_keeps_previous_snapshot(settings, monkeypatch):
+    assert run_collect(settings, [FakeSource("lidl", 3)]) == 0
+    with Storage(settings.db_path) as st:
+        before = st.offers_of_last_success("lidl")
+        products_before = st.conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+
+    original = Storage._finish_run_sql
+
+    def boom(self, run_id, status, offers_count, content_hash, error):
+        if status == "ok":  # offers are already written in the open transaction here
+            raise RuntimeError("injected before commit")
+        return original(self, run_id, status, offers_count, content_hash, error)
+
+    monkeypatch.setattr(Storage, "_finish_run_sql", boom)
+    assert run_collect(settings, [FakeSource("lidl", 4)]) == 1
+    last = runs(settings, "lidl")[-1]
+    assert last["status"] == "failed" and "injected" in last["error"]
+    with Storage(settings.db_path) as st:
+        assert st.offers_of_last_success("lidl") == before
+        assert st.conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == products_before
+        assert st.conn.execute("SELECT COUNT(*) FROM offers").fetchone()[0] == 3
 
 
 def test_accept_suspicious_saves_offers(settings, caplog):

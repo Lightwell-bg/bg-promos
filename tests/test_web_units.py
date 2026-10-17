@@ -38,6 +38,22 @@ def test_name_with_other_size_is_rejected():
     assert unit_price(300, "400 г", "Сирене 500 г") is None
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Комплект 2 x 400 г",
+        "Комплект 2х400г",
+        "Кисело мляко 3 бр. x 400 г",
+        "Сирене 400 г + 100 г подарък",
+        "Бисквити 200–400 г",
+        "Бисквити 200-400 г",
+        "Бисквити 200 - 400г",
+    ],
+)
+def test_name_with_multiplier_or_range_is_rejected(name):
+    assert unit_price(300, "400 г", name) is None
+
+
 def test_name_with_same_size_is_accepted():
     assert unit_price(300, "400 г", "Сирене 400 г")["cents"] == 750
 

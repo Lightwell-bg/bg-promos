@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { postReport, type ReportOutcome } from "../data/api";
 import { useConfig } from "../data/ConfigContext";
 import { useLang, useT } from "../i18n/LangContext";
 import { track } from "../platform/analytics";
 import { currentPageUrl } from "../platform/env";
-import { onEscape } from "../platform/lifecycle";
+import { useModal } from "../hooks/useModal";
 import styles from "./Dialog.module.css";
 
 interface Props {
@@ -23,12 +23,8 @@ export function ReportDialog({ offerId, onClose }: Props) {
   const [hp, setHp] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const openedAt = useRef(Date.now());
-  const area = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    area.current?.focus();
-    return onEscape(onClose);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useModal(dialogRef, onClose);
 
   const len = message.trim().length;
   const valid = len >= 5 && len <= 1000;
@@ -61,6 +57,7 @@ export function ReportDialog({ offerId, onClose }: Props) {
   return (
     <div className={styles.backdrop} onClick={onClose}>
       <div
+        ref={dialogRef}
         className={styles.dialog}
         role="dialog"
         aria-modal="true"
@@ -78,7 +75,7 @@ export function ReportDialog({ offerId, onClose }: Props) {
         ) : (
           <form onSubmit={submit}>
             <textarea
-              ref={area}
+              data-autofocus
               className={styles.textarea}
               rows={5}
               minLength={5}

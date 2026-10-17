@@ -95,10 +95,12 @@ class BillaSource:
                 resp = http.get(url)
             except HttpBlockedError:
                 raise
-            except httpx.HTTPError as exc:
-                if i == 0:
+            except httpx.HTTPStatusError as exc:
+                # Only a 404 on a later url means "no upcoming brochure yet"; anything else
+                # (5xx, timeouts, ...) fails the whole run so the previous snapshot stays.
+                if i == 0 or exc.response.status_code != 404:
                     raise
-                log.warning("BILLA: skipping %s: %s: %s", url, type(exc).__name__, exc)
+                log.info("BILLA: %s not published yet (404), skipping", url)
                 continue
             docs.append(RawDocument(f"brochure-{i}", url, resp.content, resp.headers.get("content-type", "")))
         return docs
@@ -208,7 +210,7 @@ def _parse_row(row: Tag, text: str, period: tuple[date, date], url: str) -> Offe
     if old_col or new_col:
         prices = _column_conditions(old_col, new_col, program, notes)
     elif multi and _MULTI_TOTAL_RE.search(body):
-        prices, body = _multipack_conditions(body, multi, notes)
+        prices, body = _multipack_conditions(body, multi, notes, program)
         tags.append("Мултипак оферта")
     if not prices:
         return None  # header / note / marketing row
@@ -263,7 +265,7 @@ def _column_conditions(
 
 
 def _multipack_conditions(
-    body: str, head: re.Match, notes: list[str]
+    body: str, head: re.Match, notes: list[str], program: str | None = None
 ) -> tuple[list[PriceCondition], str]:
     deal = " ".join((head.group(1) or "").split()) or None
     unit_price = to_cents(m.group(1)) if (m := _MULTI_UNIT_RE.search(body)) else None
@@ -289,7 +291,11 @@ def _multipack_conditions(
     text += f"{qty} бр. за " + f"{deal_total / 100:.2f}".replace(".", ",") + " €"
     if notes:
         text += "; " + "; ".join(notes)
-    out.append(PriceCondition("multibuy", deal_total, min_qty=qty, discount_pct=pct, condition_text=text))
+    out.append(
+        PriceCondition(
+            "multibuy", deal_total, program=program, min_qty=qty, discount_pct=pct, condition_text=text
+        )
+    )
 
     # Product name = text between the multipack header and the first "Цена за".
     start = head.end()

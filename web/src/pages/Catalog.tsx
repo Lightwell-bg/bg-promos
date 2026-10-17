@@ -87,7 +87,7 @@ export function Catalog() {
       </p>
 
       {results.length ? (
-        <OfferList offers={results} categories={catalog.categories} today={today} />
+        <OfferList offers={results} categories={catalog.categories} today={today} card={effective.card} />
       ) : (
         <EmptyState icon={current?.icon ?? "🔍"} text={t(current && count === 0 ? "category.empty" : "catalog.noResults")} />
       )}

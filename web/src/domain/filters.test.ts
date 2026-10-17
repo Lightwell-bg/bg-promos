@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IDS, offerById, sampleCatalog, SAMPLE_TODAY } from "../__fixtures__";
-import { DEFAULT_FILTERS, filterOffers, parseFilters, serializeFilters, sortOffers, type Filters } from "./filters";
+import { DEFAULT_FILTERS, effectiveCondition, effectiveSavings, filterOffers, parseFilters, serializeFilters, sortOffers, type Filters } from "./filters";
 import type { Offer } from "./types";
 
 const cat = sampleCatalog();
@@ -139,5 +139,45 @@ describe("URL query", () => {
     const p = parseFilters(new URLSearchParams("chain=x,lidl&sort=zzz&disc=7&card=maybe&when=never&ends=9&pmin=abc"));
     expect(p.chains).toEqual(["lidl"]);
     expect(p).toMatchObject({ sort: "discount", disc: 0, card: "all", when: "now", ends: 0, pmin: null });
+  });
+});
+
+describe("card filter uses the effective condition", () => {
+  it("effectiveCondition: without -> no-card condition, only/all -> best", () => {
+    const o = clone(IDS.lidlPlus); // best 99 (card), no_card 159
+    expect(effectiveCondition(o, "without")?.per_item_cents).toBe(159);
+    expect(effectiveCondition(o, "only")?.per_item_cents).toBe(99);
+    expect(effectiveCondition(o, "all")?.per_item_cents).toBe(99);
+    const plain = clone(IDS.lidlPromo);
+    expect(effectiveCondition(plain, "without")).toBe(plain.best);
+    const noKnown = clone(IDS.cardNoRegular);
+    expect(effectiveCondition(noKnown, "without")).toBeNull();
+  });
+
+  it("pmax=1 EUR with card=without excludes best 99 / no_card 159", () => {
+    const o = clone(IDS.lidlPlus);
+    expect(ids(filterOffers([o], f({ card: "without", pmax: 100 }), T))).toEqual([]);
+    expect(ids(filterOffers([o], f({ card: "all", pmax: 100 }), T))).toEqual([o.id]);
+    expect(ids(filterOffers([o], f({ card: "only", pmax: 100 }), T))).toEqual([o.id]);
+  });
+
+  it("min discount without card judges the no-card condition", () => {
+    const o = clone(IDS.lidlPlus); // 38% with card, no_card has no discount
+    expect(ids(filterOffers([o], f({ card: "without", disc: 10 }), T))).toEqual([]);
+    expect(ids(filterOffers([o], f({ card: "all", disc: 10 }), T))).toEqual([o.id]);
+  });
+
+  it("price sort without card uses the no-card per-item price", () => {
+    const a = clone(IDS.lidlPlus); // 99 with card, 159 without
+    const b = clone(IDS.lidlPromo);
+    b.best!.per_item_cents = 120;
+    b.best!.total_cents = 120;
+    expect(ids(sortOffers([a, b], "price", "all"))).toEqual([a.id, b.id]);
+    expect(ids(sortOffers([a, b], "price", "without"))).toEqual([b.id, a.id]);
+  });
+
+  it("savings without card = regular - no-card per item", () => {
+    expect(effectiveSavings(clone(IDS.lidlPlus), "without")).toBe(0);
+    expect(effectiveSavings(clone(IDS.lidlPlus), "all")).toBe(60);
   });
 });

@@ -175,6 +175,49 @@ def test_failed_run_after_ok_updates_chain_status(web_settings):
     assert len(json.loads(second[0])["offers"]) == 1  # last ok data stays published
 
 
+def test_db_failure_serves_stale_copy_with_new_etag(web_settings, monkeypatch):
+    import sqlite3
+
+    from bg_promos.web import catalog as catalog_mod
+
+    seed(web_settings, "lidl", [make_offer(key="1", name="One")])
+    cache = CatalogCache(web_settings)
+    good = cache.get(NOW)
+    assert json.loads(good[0])["chains"]["lidl"]["stale"] is False
+
+    def broken(path):
+        raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(catalog_mod, "read_storage", broken)
+    next_day = datetime(2026, 10, 18, 21, 1, tzinfo=timezone.utc)  # 00:01 on the 19th in Sofia
+    degraded = cache.get(next_day)
+    doc = json.loads(degraded[0])
+    assert degraded[2] != good[2]
+    assert gzip.decompress(degraded[1]) == degraded[0]
+    assert all(c["stale"] is True and c["stale_reason"] == "database unavailable" for c in doc["chains"].values())
+    assert doc["today"] == "2026-10-19"
+    assert [o["name"] for o in doc["offers"]] == ["One"]
+    assert json.loads(good[0])["chains"]["lidl"]["stale"] is False  # the good copy is untouched
+    assert cache.get(next_day) is degraded  # cached while the failure lasts
+
+    monkeypatch.undo()
+    recovered = cache.get(NOW)
+    assert json.loads(recovered[0])["chains"]["lidl"]["stale"] is False
+
+
+def test_db_failure_without_previous_payload_raises(web_settings, monkeypatch):
+    import sqlite3
+
+    from bg_promos.web import catalog as catalog_mod
+
+    def broken(path):
+        raise sqlite3.OperationalError("boom")
+
+    monkeypatch.setattr(catalog_mod, "read_storage", broken)
+    with pytest.raises(sqlite3.Error):
+        CatalogCache(web_settings).get(NOW)
+
+
 def test_reader_does_not_lock_against_wal_writer(web_settings):
     seed(web_settings, "lidl", [make_offer(key="seed", name="run-1")])
     errors: list[BaseException] = []

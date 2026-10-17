@@ -131,6 +131,41 @@ def test_multibuy_2plus1_regular_is_old_over_three():
     assert (k[("multibuy", "kaufland_card")].price_cents, k[("multibuy", "kaufland_card")].min_qty) == (400, 3)
 
 
+def test_multibuy_card_title_with_plain_group_only():
+    (o,) = _parse({
+        "title": "X", "detailTitle": "ВЗЕМИ 1+1 БЕЗПЛАТНО\nKAUFLAND CARD XTRA", "price": 2.0, "discount": 50,
+        "formattedPrice": "2,00 €", "formattedOldPrice": "4,00 €",
+    })
+    k = kinds(o)
+    assert set(k) == {("regular", None), ("multibuy", "kaufland_card")}
+    assert k[("regular", None)].price_cents == 200
+    assert (k[("multibuy", "kaufland_card")].price_cents, k[("multibuy", "kaufland_card")].discount_pct) == (200, 50)
+
+
+def test_multibuy_both_groups_emit_plain_and_card_without_mixing():
+    (o,) = _parse({
+        "title": "X", "detailTitle": "ВЗЕМИ 1+1 БЕЗПЛАТНО\nKAUFLAND CARD XTRA", "price": 3.0, "discount": 25,
+        "formattedPrice": "3,00 €", "formattedOldPrice": "4,00 €",
+        "loyaltyFormattedPrice": "2,00 €", "loyaltyFormattedOldPrice": "4,00 €", "loyaltyDiscount": 50,
+    })
+    k = kinds(o)
+    assert set(k) == {("regular", None), ("multibuy", None), ("multibuy", "kaufland_card")}
+    assert k[("regular", None)].price_cents == 200  # plain old total / 2
+    assert (k[("multibuy", None)].price_cents, k[("multibuy", None)].discount_pct) == (300, 25)
+    assert (k[("multibuy", "kaufland_card")].price_cents, k[("multibuy", "kaufland_card")].discount_pct) == (200, 50)
+
+
+def test_multibuy_loyalty_group_does_not_borrow_plain_old_price():
+    (o,) = _parse({
+        "title": "X", "detailTitle": "ВЗЕМИ 1+1 БЕЗПЛАТНО\nKAUFLAND CARD XTRA",
+        "formattedOldPrice": "9,00 €", "discount": 10,
+        "loyaltyFormattedPrice": "2,00 €", "loyaltyDiscount": 50,
+    })
+    k = kinds(o)
+    assert set(k) == {("multibuy", "kaufland_card")}  # no old price in the loyalty group -> no regular
+    assert k[("multibuy", "kaufland_card")].discount_pct == 50
+
+
 def test_grams_like_500_plus_200_is_not_multibuy():
     (o,) = _parse({
         "title": "X", "detailTitle": "500+200 г БОНУС", "price": 3.0,

@@ -18,6 +18,14 @@ _PER_KG_RE = re.compile(r"^(?:за|по)?\s*1?\s*(?:kg|кг)\.?$")
 _PER_L_RE = re.compile(r"^(?:за|по)?\s*1?\s*(?:l|л)\.?$")
 _SINGLE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(kg|кг|g|г|гр|l|л|ml|мл)\.?(?:\s*(?:pet|рет|bib|бут\.?|кен))?$")
 _QTY_IN_NAME_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kg|кг|g|г|гр|l|л|ml|мл)(?![a-zа-я])", re.I)
+_DASH = "-‐‑‒–—−"
+_UNIT_ALT = r"(?:kg|кг|g|г|гр|l|л|ml|мл)(?![a-zа-я])"
+# "2 x 400 г", "2х400г", "3 бр. x ..." and any "+" (e.g. "32 + 8 бр.").
+_MULTI_IN_NAME_RE = re.compile(r"\d\s*[xх×]\s*\d|(?:бр\.?|pcs\.?)\s*[xх×](?![a-zа-я])|\+", re.I)
+# "200-400 г", "200 - 400г", "200 г – 400 г" (hyphen or any dash).
+_RANGE_IN_NAME_RE = re.compile(
+    rf"\d+(?:[.,]\d+)?\s*(?:{_UNIT_ALT})?\s*[{_DASH}]\s*\d+(?:[.,]\d+)?\s*{_UNIT_ALT}", re.I
+)
 
 _FACTORS = {
     "kg": (1000, "kg"), "кг": (1000, "kg"), "g": (1, "kg"), "г": (1, "kg"), "гр": (1, "kg"),
@@ -56,6 +64,10 @@ def parse_quantity(unit_text: str | None, name: str = "") -> Quantity | None:
     factor, base = _FACTORS[m.group(2)]
     amount = round(value * factor)
     if amount <= 0:
+        return None
+    # Multipacks / compound quantities / ranges anywhere in the name: the unit text alone
+    # does not describe what is sold.
+    if _MULTI_IN_NAME_RE.search(name or "") or _RANGE_IN_NAME_RE.search(name or ""):
         return None
     # The name must not mention a different quantity (variants of different size).
     for v, unit in _QTY_IN_NAME_RE.findall(name or ""):

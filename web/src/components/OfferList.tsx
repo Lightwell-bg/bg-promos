@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CardMode } from "../domain/filters";
 import type { Category, Offer } from "../domain/types";
 import { useT } from "../i18n/LangContext";
 import { OfferCard } from "./OfferCard";
@@ -10,10 +11,12 @@ interface Props {
   offers: Offer[];
   categories: Category[];
   today: string;
+  /** Card filter of the catalog, forwarded to the cards. */
+  card?: CardMode;
 }
 
 /** Grid of cards rendered incrementally (40 at a time) as the user scrolls. */
-export function OfferList({ offers, categories, today }: Props) {
+export function OfferList({ offers, categories, today, card }: Props) {
   const t = useT();
   const [shown, setShown] = useState(PAGE);
   const sentinel = useRef<HTMLDivElement | null>(null);
@@ -41,7 +44,7 @@ export function OfferList({ offers, categories, today }: Props) {
     <>
       <div className={styles.grid}>
         {offers.slice(0, shown).map((o) => (
-          <OfferCard key={o.id} offer={o} category={catById.get(o.category)} today={today} />
+          <OfferCard key={o.id} offer={o} category={catById.get(o.category)} today={today} card={card} />
         ))}
       </div>
       {hasMore && (

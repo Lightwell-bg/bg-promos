@@ -51,7 +51,12 @@ export function Search() {
 
   function commit(q: string) {
     const query = q.trim();
-    if (!query) return;
+    if (!query) {
+      // Empty commit: back to the initial search screen; not a recent search.
+      setText("");
+      setParams({}, { replace: true });
+      return;
+    }
     setText(query);
     setParams({ q: query }, { replace: true });
     const next = [query, ...recent.filter((r) => r.toLowerCase() !== query.toLowerCase())].slice(0, RECENT_MAX);

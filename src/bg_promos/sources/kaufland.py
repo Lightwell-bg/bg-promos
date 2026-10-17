@@ -139,27 +139,37 @@ def _multibuy(item: dict[str, Any]) -> list[PriceCondition] | None:
     qty = int(m.group(1)) + int(m.group(2))
     if qty < 2:
         return None
-    total = to_cents(item.get("price"))
-    for key in ("formattedPrice", "loyaltyFormattedPrice"):
-        if total is None:
-            total = to_cents(item.get(key))
-    old_total = to_cents(item.get("formattedOldPrice"))
-    if old_total is None:
-        old_total = to_cents(item.get("loyaltyFormattedOldPrice"))
-    if total is None:
-        return None
-    pct = item.get("discount") or item.get("loyaltyDiscount") or None
-    out: list[PriceCondition] = []
-    if old_total is not None and old_total > 0:
-        out.append(PriceCondition("regular", round(old_total / qty)))
-    out.append(
-        PriceCondition(
-            "multibuy", total, min_qty=qty,
-            program="kaufland_card" if "CARD" in title.upper() else None,
-            discount_pct=int(pct) if pct else None,
-            condition_text=title,
-        )
+    # Two consistent field groups; never mix price / old price / discount across them.
+    plain_total = to_cents(item.get("price"))
+    if plain_total is None:
+        plain_total = to_cents(item.get("formattedPrice"))
+    plain = (plain_total, to_cents(item.get("formattedOldPrice")), item.get("discount"))
+    loyal = (
+        to_cents(item.get("loyaltyFormattedPrice")),
+        to_cents(item.get("loyaltyFormattedOldPrice")),
+        item.get("loyaltyDiscount"),
     )
+    groups: list[tuple[str | None, tuple]] = []
+    if plain[0] is not None:
+        # A card title with only the plain group (current live data) is a card deal.
+        groups.append(("kaufland_card" if "CARD" in title.upper() and loyal[0] is None else None, plain))
+    if loyal[0] is not None:
+        groups.append(("kaufland_card", loyal))
+    if not groups:
+        return None
+    out: list[PriceCondition] = []
+    seen_regular = False
+    for program, (total, old_total, pct) in groups:
+        if old_total is not None and old_total > 0 and not seen_regular:
+            out.append(PriceCondition("regular", round(old_total / qty)))
+            seen_regular = True
+        out.append(
+            PriceCondition(
+                "multibuy", total, min_qty=qty, program=program,
+                discount_pct=int(pct) if pct else None,
+                condition_text=title,
+            )
+        )
     return out
 
 

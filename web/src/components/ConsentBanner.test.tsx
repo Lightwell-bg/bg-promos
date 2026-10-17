@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +51,31 @@ describe("ConsentBanner + AnalyticsGate", () => {
     setup("G-ABC123");
     expect(screen.getAllByRole("button", { name: "Приемам" }).length).toBeGreaterThan(0);
     expect(scripts()).toHaveLength(0);
+  });
+
+  it("a choice expires after 365 days: the banner returns on foreground without a reload", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+      prefs.set("consent", { choice: "granted", at: Date.now() });
+      resetConsentCache();
+      setup("G-ABC123");
+      expect(document.querySelector("section[aria-label]")).toBeNull();
+
+      vi.setSystemTime(new Date("2026-12-31T00:00:00Z")); // 364 days: still valid
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(document.querySelector("section[aria-label]")).toBeNull();
+
+      vi.setSystemTime(new Date("2027-01-03T00:00:00Z")); // > 365 days
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(document.querySelector("section[aria-label]")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reject keeps Google unloaded and hides the banner", async () => {
