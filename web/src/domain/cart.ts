@@ -406,7 +406,9 @@ function parseCondition(raw: unknown): PriceCondition | null {
   if (typeof c.kind !== "string" || !KINDS.includes(c.kind)) return null;
   if (!(c.program === null || (typeof c.program === "string" && PROGRAMS.includes(c.program)))) return null;
   if (typeof c.min_qty !== "number" || !Number.isInteger(c.min_qty) || c.min_qty < 1 || c.min_qty > MAX_QTY) return null;
-  if (!isCents(c.total_cents) || !isCents(c.per_item_cents)) return null;
+  // total is integer cents; the per-item rate may be fractional (e.g. 100 cents for 3 units)
+  if (!isCents(c.total_cents)) return null;
+  if (typeof c.per_item_cents !== "number" || !Number.isFinite(c.per_item_cents) || c.per_item_cents < 0) return null;
   if (!(c.discount_pct === null || (typeof c.discount_pct === "number" && Number.isFinite(c.discount_pct)))) return null;
   if (!isStrOrNull(c.text)) return null;
   return {

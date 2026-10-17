@@ -59,6 +59,28 @@ describe("localKv", () => {
     expect(kv.get(KEY)).toBe(5);
   });
 
+  it("a failed write keeps the new value authoritative over the stale stored one until a write succeeds", () => {
+    const m = new Map<string, string>([[KEY, JSON.stringify("S0")]]);
+    let failing = false;
+    const store = {
+      getItem: (k: string) => m.get(k) ?? null,
+      removeItem: (k: string) => void m.delete(k),
+      setItem: (k: string, v: string) => {
+        if (failing) throw new Error("QuotaExceededError");
+        m.set(k, v);
+      },
+    } as unknown as Storage;
+    const kv = createLocalKv({ getStorage: () => store });
+    expect(kv.get(KEY)).toBe("S0");
+    failing = true;
+    expect(kv.set(KEY, "S1")).toBe(false);
+    expect(kv.get(KEY)).toBe("S1"); // not the stale S0 still sitting in the storage
+    failing = false;
+    expect(kv.set(KEY, "S2")).toBe(true);
+    expect(kv.get(KEY)).toBe("S2");
+    expect(JSON.parse(m.get(KEY) ?? "null")).toBe("S2");
+  });
+
   it("delivers changes made in another tab (storage event) to subscribers", () => {
     const kv = createLocalKv();
     const seen: unknown[] = [];

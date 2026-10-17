@@ -12,6 +12,7 @@ import { detectLang, isLang } from "./i18n";
 import { LangProvider } from "./i18n/LangContext";
 import { Brochures } from "./pages/Brochures";
 import { Cart } from "./pages/Cart";
+import { CartImport } from "./pages/CartImport";
 import { Catalog } from "./pages/Catalog";
 import { Home } from "./pages/Home";
 import { Legal } from "./pages/Legal";
@@ -39,8 +40,9 @@ export function redirectTarget(pathname: string, lang: Lang): string {
 }
 
 function RootRedirect() {
-  const { pathname, search } = useLocation();
-  return <Navigate to={`${redirectTarget(pathname, detectedLang())}${search}`} replace />;
+  const { pathname, search, hash } = useLocation();
+  // Query and fragment survive the redirect (the share link carries its payload in the fragment).
+  return <Navigate to={`${redirectTarget(pathname, detectedLang())}${search}${hash}`} replace />;
 }
 
 /** Unknown page under a valid language prefix: go to that language's home. */
@@ -74,6 +76,7 @@ export function AppRoutes() {
         <Route path="search" element={<Search />} />
         <Route path="brochures" element={<Brochures />} />
         <Route path="cart" element={<Cart />} />
+        <Route path="cart/import" element={<CartImport />} />
         <Route path="offer/:id" element={<OfferDetail />} />
         <Route path="legal/:page" element={<Legal />} />
         <Route path="*" element={<UnknownUnderLang />} />

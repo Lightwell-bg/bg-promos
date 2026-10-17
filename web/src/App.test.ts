@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { redirectTarget } from "./App";
+import { isNoindexPath } from "./seo/meta";
 
 describe("redirectTarget", () => {
   it("invalid language prefix keeps the rest of the path", () => {
@@ -11,6 +12,10 @@ describe("redirectTarget", () => {
   it("missing prefix on a known page keeps the page", () => {
     expect(redirectTarget("/catalog", "bg")).toBe("/bg/catalog");
     expect(redirectTarget("/offer/abc", "ru")).toBe("/ru/offer/abc");
+  });
+  it("the import link keeps its path and is noindex", () => {
+    expect(redirectTarget("/cart/import", "ru")).toBe("/ru/cart/import");
+    expect(isNoindexPath("/bg/cart/import")).toBe(true);
   });
   it("root and unknown single segments go to the language home", () => {
     expect(redirectTarget("/", "bg")).toBe("/bg");

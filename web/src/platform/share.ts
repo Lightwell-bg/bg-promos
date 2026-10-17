@@ -1,6 +1,8 @@
 export interface ShareData {
   title: string;
   url: string;
+  /** Optional message passed to the native share sheet (the copy fallback copies only the url). */
+  text?: string;
 }
 
 export type ShareResult = "shared" | "copied" | "failed";
@@ -14,7 +16,9 @@ export const webSharer: Sharer = {
   async share(data) {
     try {
       if (typeof navigator.share === "function") {
-        await navigator.share({ title: data.title, url: data.url });
+        await navigator.share(
+          data.text ? { title: data.title, text: data.text, url: data.url } : { title: data.title, url: data.url },
+        );
         return "shared";
       }
     } catch (e) {

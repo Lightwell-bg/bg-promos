@@ -10,8 +10,8 @@
 export interface LocalKv {
   /** Latest stored value (fresh read); undefined when absent or unreadable. */
   get<T>(key: string): T | undefined;
-  /** Writes right away (and keeps an in-memory copy if the storage refuses). */
-  set(key: string, value: unknown): void;
+  /** Writes right away; if the storage refuses, the memory copy becomes authoritative. Returns true on success. */
+  set(key: string, value: unknown): boolean;
   remove(key: string): void;
   /** Calls `cb` with the new value (undefined = removed) when another tab changes the key. */
   subscribe(key: string, cb: (value: unknown) => void): () => void;
@@ -67,6 +67,8 @@ export function createLocalKv(opts: LocalKvOptions = {}): LocalKv {
 
   return {
     get<T>(key: string): T | undefined {
+      // A failed write left the memory copy as the only up-to-date value for this key.
+      if (memoryOnly.has(key)) return cache.get(key) as T | undefined;
       let raw: string | null;
       try {
         raw = getStorage().getItem(key);
@@ -89,8 +91,10 @@ export function createLocalKv(opts: LocalKvOptions = {}): LocalKv {
       try {
         getStorage().setItem(key, JSON.stringify(value));
         memoryOnly.delete(key);
+        return true;
       } catch {
-        memoryOnly.add(key); // storage unavailable or full: the in-memory copy keeps serving
+        memoryOnly.add(key); // storage unavailable or full: the in-memory copy is authoritative
+        return false;
       }
     },
     remove(key) {

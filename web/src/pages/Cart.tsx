@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChainBadge } from "../components/ChainBadge";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
@@ -10,10 +10,12 @@ import { useCart } from "../data/CartContext";
 import { useCatalog } from "../data/CatalogContext";
 import { hasCard } from "../domain/cart";
 import type { ChainGroup, ReconciledLine } from "../domain/cart";
+import { canShare } from "../domain/carts";
 import { conditionChips, formatEUR, priceModel } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
 import { setTitle } from "../platform/document";
+import { share } from "../platform/share";
 import styles from "./Cart.module.css";
 import page from "./Page.module.css";
 
@@ -24,19 +26,150 @@ function shortDate(iso: string | null): string {
   return `${d}.${m}`;
 }
 
-type Confirm = { kind: "all" } | { kind: "chain"; chain: ChainId } | null;
+/** "2026-10-17T08:00:00Z" -> "17.10" (Sofia date). */
+function sofiaDayMonth(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Sofia", day: "2-digit", month: "2-digit" })
+    .format(d)
+    .replace("/", ".");
+}
+
+type Confirm = { kind: "all" } | { kind: "chain"; chain: ChainId } | { kind: "list"; id: string } | null;
+
+/** One-time message passed (via router state) by the import page. */
+export interface ImportNote {
+  mode: "filled" | "created" | "existing" | "nothing";
+  missing: number;
+}
+
+function noteOf(v: unknown): ImportNote | null {
+  const n = (v as { importNote?: ImportNote } | null)?.importNote;
+  return n && typeof n.mode === "string" && typeof n.missing === "number" ? n : null;
+}
 
 export function Cart() {
   const t = useT();
   const lang = useLang();
   const cart = useCart();
   const { catalog } = useCatalog();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [confirm, setConfirm] = useState<Confirm>(null);
+  const [note, setNote] = useState("");
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [importNote, setImportNote] = useState<ImportNote | null>(() => noteOf(location.state));
   const { summary } = cart;
+  const shareState = canShare(cart.state);
 
   useEffect(() => {
     setTitle(`${t("cart.title")} | ${t("app.name")}`);
   }, [t]);
+
+  // The import banner is shown once: drop it from the history entry so a reload does not repeat it.
+  useEffect(() => {
+    if (noteOf(location.state)) navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!note) return;
+    const id = setTimeout(() => setNote(""), 3000);
+    return () => clearTimeout(id);
+  }, [note]);
+
+  async function onShare() {
+    const url = cart.shareLink(lang);
+    if (!url) return;
+    const result = await share({ title: t("app.name"), text: t("cart.shareText"), url });
+    if (result === "copied") setNote(t("cart.shareCopied"));
+    else if (result === "failed") setNote(t("cart.shareFailed"));
+  }
+
+  const listLabel = (l: (typeof cart.lists)[number]) =>
+    l.name ?? (l.origin === "own" ? t("cart.listOwn") : t("cart.listShared", { date: sofiaDayMonth(l.createdAt) }));
+
+  const importBanner = importNote && (
+    <div className={`${styles.notice} ${importNote.mode === "nothing" ? styles.warn : styles.info}`} role="status">
+      <span>
+        {t(`cart.import.${importNote.mode}`)}
+        {importNote.missing > 0 && <> · {t("cart.import.missing", { n: importNote.missing })}</>}
+      </span>
+      <button type="button" className={styles.noticeBtn} onClick={() => setImportNote(null)}>
+        {t("cart.ok")}
+      </button>
+    </div>
+  );
+
+  const activeList = cart.lists.find((l) => l.active);
+  const switcher = cart.lists.length >= 2 && activeList && (
+    <div className={styles.lists}>
+      <div className={styles.chips} role="group" aria-label={t("cart.lists")}>
+        {cart.lists.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className={`${styles.listChip} ${l.active ? styles.listChipActive : ""}`}
+            aria-pressed={l.active}
+            onClick={() => cart.switchList(l.id)}
+          >
+            {listLabel(l)} · {l.count}
+          </button>
+        ))}
+      </div>
+      {renaming === activeList.id ? (
+        <form
+          className={styles.renameForm}
+          onSubmit={(e) => {
+            e.preventDefault();
+            cart.renameList(activeList.id, draft);
+            setRenaming(null);
+          }}
+        >
+          <input
+            className={styles.renameInput}
+            value={draft}
+            maxLength={40}
+            aria-label={t("cart.renameLabel")}
+            onChange={(e) => setDraft(e.target.value)}
+            autoFocus
+          />
+          <button type="submit" className={page.secondaryBtn}>
+            {t("cart.renameSave")}
+          </button>
+        </form>
+      ) : (
+        <div className={styles.listActions}>
+          <button
+            type="button"
+            className={styles.linkBtn}
+            onClick={() => {
+              setDraft(activeList.name ?? "");
+              setRenaming(activeList.id);
+            }}
+          >
+            {t("cart.rename")}
+          </button>
+          <button type="button" className={styles.linkBtn} onClick={() => setConfirm({ kind: "list", id: activeList.id })}>
+            {t("cart.deleteList")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+  const listDialog = confirm?.kind === "list" && (
+    <ConfirmDialog
+      title={t("cart.deleteListTitle")}
+      text={t("cart.deleteListText")}
+      confirmLabel={t("cart.deleteList")}
+      onClose={() => setConfirm(null)}
+      onConfirm={() => {
+        cart.deleteList(confirm.id);
+        setConfirm(null);
+        setRenaming(null);
+      }}
+    />
+  );
 
   const icons = new Map((catalog?.categories ?? []).map((c) => [c.id, c.icon]));
   const onQty = (id: string, q: number) => (q < 1 ? cart.remove(id) : cart.setQty(id, q));
@@ -190,6 +323,9 @@ export function Cart() {
     return (
       <div>
         <h1 className={page.title}>{t("cart.title")}</h1>
+        {importBanner}
+        {switcher}
+        {listDialog}
         <EmptyState icon="🛒" text={t("cart.empty")}>
           <p className={styles.emptyHint}>{t("cart.emptyHint")}</p>
           <Link to={`/${lang}/catalog`} className={page.primaryBtn}>
@@ -211,10 +347,33 @@ export function Cart() {
           <h1 className={page.title}>{t("cart.title")}</h1>
           <p className={styles.count}>{t("cart.itemsCount", { n: cart.count })}</p>
         </div>
-        <button type="button" className={page.secondaryBtn} onClick={() => setConfirm({ kind: "all" })}>
-          {t("cart.clear")}
-        </button>
+        <div className={styles.headActions}>
+          <button
+            type="button"
+            className={page.secondaryBtn}
+            disabled={shareState === "too_many"}
+            title={shareState === "too_many" ? t("cart.shareTooMany") : undefined}
+            onClick={() => void onShare()}
+          >
+            {t("cart.share")}
+          </button>
+          <button type="button" className={page.secondaryBtn} onClick={() => setConfirm({ kind: "all" })}>
+            {t("cart.clear")}
+          </button>
+        </div>
       </div>
+      {shareState === "too_many" && (
+        <p role="status" className={styles.shareNote}>
+          {t("cart.shareTooMany")}
+        </p>
+      )}
+      {note && (
+        <p role="status" className={styles.shareNote}>
+          {note}
+        </p>
+      )}
+      {importBanner}
+      {switcher}
 
       {summary.groups.map(groupView)}
 
@@ -233,6 +392,7 @@ export function Cart() {
         <p className={styles.disclaimer}>{t("cart.disclaimer")}</p>
       </div>
 
+      {listDialog}
       {confirm?.kind === "all" && (
         <ConfirmDialog
           title={t("cart.clearTitle")}

@@ -41,3 +41,22 @@ export function currentPageUrl(): string {
 export function isOnline(): boolean {
   return navigator.onLine !== false;
 }
+
+/** Origin of the page (scheme + host), used to build absolute share links. */
+export function siteOrigin(): string {
+  return window.location.origin;
+}
+
+/** Current location hash including the leading "#" ("" when none). */
+export function locationHash(): string {
+  return window.location.hash;
+}
+
+/** Drops the hash from the address bar without navigating or reloading. */
+export function clearLocationHash(): void {
+  try {
+    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  } catch {
+    /* ignore: some webviews forbid history changes */
+  }
+}
