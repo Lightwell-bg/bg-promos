@@ -8,3 +8,38 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.ini:/app/config.ini:ro
+
+  # Public read-only API (stage 2). Reads the same SQLite file (WAL) through a
+  # read-only connection. Listens on the host loopback only; the reverse proxy
+  # (nginx) publishes it. Client IP comes from X-Forwarded-For via the app's own
+  # trusted_proxies logic, so uvicorn's proxy-header rewriting is disabled.
+  api:
+    # Own image tag: building api/web never retags the collector image used by cron.
+    image: bg-promos-api
+    build: .
+    env_file: .env
+    entrypoint: ["python", "-m", "uvicorn"]
+    command: ["bg_promos.web.app:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers"]
+    volumes:
+      - ./data:/app/data
+      - ./config.ini:/app/config.ini:ro
+    ports:
+      - "127.0.0.1:8001:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Static PWA (prerendered pages) + /api proxy to the api service. Listens on the host
+  # loopback only; the host nginx (TLS, promos.centerai.eu) proxies everything to 127.0.0.1:8002.
+  web:
+    build: ./web
+    image: bg-promos-web
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8002:80"
+    restart: unless-stopped

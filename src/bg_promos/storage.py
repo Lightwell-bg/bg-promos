@@ -130,6 +130,21 @@ class Storage:
             self.conn.execute("PRAGMA journal_mode = WAL")
         self._migrate()
 
+    @classmethod
+    def read_only(cls, path: str | Path) -> Storage:
+        """Read-only view of an existing database (the public API).
+
+        Opens the file with ``mode=ro`` and runs no DDL, no migration and no
+        journal_mode change, so it can never write; WAL readers do not block the
+        collector's writer.
+        """
+        self = cls.__new__(cls)
+        self.path = str(path)
+        self.conn = sqlite3.connect(f"{Path(self.path).resolve().as_uri()}?mode=ro", uri=True, timeout=5)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+        return self
+
     def close(self) -> None:
         self.conn.close()
 

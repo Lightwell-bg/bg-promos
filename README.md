@@ -3,16 +3,17 @@
 Collectors of current promo offers of the Bulgarian retail chains **Lidl**, **Kaufland** and **BILLA**.
 Offers are parsed into a normalized model, stored in SQLite (with price history) and exported as JSON files.
 
-Documentation: [Quick start (RU)](docs/QUICK_START.md) | [Sources research (RU)](docs/SOURCES.md) | [Progress (RU)](docs/PROGRESS.md) | [Русская версия README](README_RU.md)
+Documentation: [Quick start (RU)](docs/QUICK_START.md) | [Deploy (RU)](docs/DEPLOY.md) | [API](docs/API.md) | [Mobile stores (RU)](docs/MOBILE_STORES.md) | [Sources research (RU)](docs/SOURCES.md) | [Progress (RU)](docs/PROGRESS.md) | [Русская версия README](README_RU.md)
 
 ## Scope
 
 - **Stage 1 (done):** collectors for three chains -> SQLite -> JSON export; scheduled runs; completeness checks; stale flags.
-- **Future stages (not started):** matching the same product across chains, price comparison, a consumer-facing service on top of the JSON/SQLite data.
+- **Stage 2 (done, rollout pending):** public read-only API (FastAPI) and a mobile-first PWA (React + Vite + TypeScript) at `https://promos.centerai.eu`: catalog, search, filters, category landing pages, brochures, bilingual (BG/RU) legal pages, error report form (Telegram), optional Google Analytics 4 with consent, build-time prerender for SEO.
+- **Future stages (not started):** matching the same product across chains, price comparison, notifications, store packaging ([docs/MOBILE_STORES.md](docs/MOBILE_STORES.md)).
 
 ## Stack
 
-Python 3.12+, `httpx` (HTTP), `beautifulsoup4` (HTML), `python-dotenv`, `tzdata`, SQLite (stdlib), `pytest`. Docker / Docker Compose for the server.
+Python 3.12+, `httpx` (HTTP), `beautifulsoup4` (HTML), `python-dotenv`, `tzdata`, SQLite (stdlib, WAL), `pytest`. API: FastAPI + uvicorn. Frontend: React 18, Vite 5, TypeScript, `vite-plugin-pwa` (Workbox), Vitest; nginx in Docker serves the static build. Docker / Docker Compose for the server.
 
 ## Project structure
 
@@ -26,11 +27,15 @@ src/bg_promos/
   http.py         polite HTTP client (delay, retries, User-Agent with contact)
   models.py       Offer / PriceCondition
   sources/        lidl.py, kaufland.py, billa.py adapters
+  web/            FastAPI app: catalog, categories, pricing, report (Telegram), config
+web/              PWA (React + Vite + TS): src/pages, src/components, src/domain, src/platform,
+                  src/content/legal (BG/RU legal texts), src/seo, scripts/prerender.mjs,
+                  Dockerfile, nginx.conf, pwa-assets.config.ts
 tests/            pytest suite with saved fixtures
-docs/             QUICK_START.md, SOURCES.md, PROGRESS.md
+docs/             QUICK_START.md, DEPLOY.md, API.md, MOBILE_STORES.md, SOURCES.md, PROGRESS.md
 config.ini        non-secret settings
 .env.example      environment template
-Dockerfile, docker-compose.yml
+Dockerfile, docker-compose.yml   services: collector (cron), api (:8001), web (:8002)
 data/             (git-ignored) SQLite db, raw archive, JSON export
 ```
 
@@ -43,6 +48,67 @@ data/             (git-ignored) SQLite db, raw archive, JSON export
 | BILLA | `https://ssbbilla.site/catalog/sedmichna-broshura` and `.../predstoyashta-broshura` | HTML (text version of the brochure) | current and upcoming brochure |
 
 Details, field mapping and risks: [docs/SOURCES.md](docs/SOURCES.md).
+
+## Stage 2: public API and PWA
+
+Architecture:
+
+```
+host cron --> collector (one-shot) --> SQLite data/bg_promos.sqlite3 (WAL)
+                                              |  read-only
+browser --HTTPS--> host nginx --> 127.0.0.1:8002  web (nginx: static PWA + prerendered pages)
+                                                    '-- /api/ --> api:8001 (FastAPI) -----'
+                                                          '-- Telegram Bot API (error reports)
+browser --(only after consent)--> Google Analytics 4
+```
+
+API contract: [docs/API.md](docs/API.md). Deployment: [docs/DEPLOY.md](docs/DEPLOY.md). Store packaging plan: [docs/MOBILE_STORES.md](docs/MOBILE_STORES.md).
+
+Backend development (venv activated, see below):
+
+```bash
+python -m uvicorn bg_promos.web.app:app --port 8001
+```
+
+Frontend development (Node 22; the Vite dev server proxies `/api` to `127.0.0.1:8001`):
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest
+npm run build      # tsc + vite build + prerender (dist/, sitemap.xml, robots.txt)
+npm run preview    # http://localhost:4173 (serves dist/, proxies /api)
+npm run assets     # regenerate PWA icons from public/icon.svg (@vite-pwa/assets-generator)
+npm run og         # regenerate public/og-image.png
+```
+
+`npm run build` writes static HTML shells for `/bg`, `/ru`, `/<lang>/catalog|search|brochures`, `/<lang>/c/<category>` and `/<lang>/legal/<page>` (title, description, canonical, hreflang, Open Graph, JSON-LD on home pages), plus `root.html` for `/`, `sitemap.xml` and `robots.txt`. The category list for these pages is `web/src/seo/categories.json` (must match `src/bg_promos/web/categories.py`; a test checks it).
+
+New `config.ini` sections:
+
+| Section | Key | Meaning |
+|---|---|---|
+| web | `site_url` | Public site URL (`https://promos.centerai.eu`) |
+| web | `cors_origins` | Comma-separated allowed origins (site, `capacitor://localhost`, dev servers) |
+| web | `ga4_id` | Google Analytics 4 Measurement ID (`G-XXXXXXXXXX`); empty = analytics and the consent banner are off |
+| web | `contact_email`, `operator` | Shown in legal pages and the API config (`info@centerai.eu`, `CenterAI`) |
+| web | `report_hourly_per_ip`, `report_daily_per_ip`, `report_daily_global` | Anti-spam limits of the error report form |
+| web | `trusted_proxies` | Proxies whose `X-Forwarded-For` is trusted (IPs / CIDR) |
+| brochures | `lidl`, `kaufland`, `billa` | Brochure page of each chain (shown in the app) |
+| offers_urls | `lidl`, `kaufland`, `billa` | Offers page of each chain (fallback "to the source" link) |
+
+New environment variables:
+
+| Variable | File | Meaning |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | `.env` | Telegram bot for error reports; empty = the report form answers 503 |
+| `VITE_API_BASE` | `web/.env` (template `web/.env.example`) | Absolute API base for native shells; empty = same origin |
+
+### Connecting external services (stage 2)
+
+- **Telegram Bot API** (error reports): open `@BotFather`, send `/newbot`, copy the token into `TELEGRAM_BOT_TOKEN`. Write to your bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` into `TELEGRAM_CHAT_ID`. Docs: https://core.telegram.org/bots/api. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Google Analytics 4** (optional, consent only): create a property at https://analytics.google.com, add a Web data stream for `https://promos.centerai.eu`, copy the Measurement ID (`G-...`) into `config.ini` `[web] ga4_id`. Set data retention to 14 months and turn Google signals off. Nothing from Google is loaded before the visitor accepts. Docs: https://support.google.com/analytics/answer/9304153.
 
 ## Virtual environment and installation
 
@@ -105,6 +171,7 @@ Environment variables (`.env`, template in `.env.example`):
 | `BG_PROMOS_DATA_DIR` | Optional override of `data_dir` (empty = use `config.ini`) |
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
 | `BG_PROMOS_CONFIG` | Optional path to `config.ini` (not in `.env.example`; set by the Docker image to `/app/config.ini`) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Stage 2: Telegram bot for error reports (empty = form disabled) |
 
 ```bash
 cp .env.example .env
@@ -221,7 +288,8 @@ The flat fields are shortcuts: `price_cents` and `discount_pct` are the **promo*
 ## Tests
 
 ```bash
-pytest -q
+pytest -q                          # backend (collectors, API)
+cd web && npm test                 # frontend (Vitest)
 ```
 
 ## Docker and deployment (VPS, Ubuntu + Docker Compose)
@@ -241,3 +309,15 @@ crontab -e   # add the line from the "Scheduling" section
 ```
 
 `<repository-url>` is the address of your own git repository with this project. The image runs as user `app` (uid 1000), `config.ini` and `data/` are mounted from the host (`data_dir` resolves to `/app/data`). Verification: `stats` shows `last run: ok` for all chains and `data/export/offers_current.json` exists. Update: `git pull && docker compose build`.
+
+Stage 2 services (`api` on `127.0.0.1:8001`, `web` on `127.0.0.1:8002`) are started separately and never touch the collector or cron:
+
+```bash
+docker compose build api web && docker compose up -d api web
+curl -s http://127.0.0.1:8001/api/health
+curl -I http://127.0.0.1:8002/
+```
+
+The host nginx for `promos.centerai.eu` proxies everything to `127.0.0.1:8002`; the full procedure (ports check, Telegram, GA4, nginx, certificate) is in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+The legal texts in `web/src/content/legal/` are a template, not legal advice.

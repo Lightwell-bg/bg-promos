@@ -50,7 +50,7 @@ def test_discounted_item_mapping(offers):
     assert o.product_ref == "10064410"
     assert o.brand == "MILKA"
     assert o.name.startswith("MILKA ")
-    assert o.category
+    assert o.category == "Светове на нуждата/Храна и близки до нея храни/Хляб и тестени изделия/Сладки закуски"
     assert o.unit_text.startswith("56 g/")
     assert o.image_url.startswith("https://")
     assert o.product_url == "https://www.lidl.bg/p/milka-donat/p10064410"
@@ -123,6 +123,22 @@ def test_member_price_inside_price_object(source):
     k = kinds(o)
     assert k[("regular", None)].price_cents == 100
     assert k[("loyalty", "lidl_plus")].price_cents == 80
+
+
+def test_category_falls_back_to_coarse_value(source):
+    def page(keyfacts):
+        return {"numFound": 1, "items": [{"gridbox": {"data": {
+            "productId": 6, "fullTitle": "X", "category": "Хранителни", "keyfacts": keyfacts,
+            "storeEndDate": 1792357199, "price": {"price": 0.8, "oldPrice": 1.0},
+        }}}]}
+
+    [o] = source.parse([RawDocument("p", "u", json.dumps(page({}), ensure_ascii=False).encode())], today=TODAY)
+    assert o.category == "Хранителни"
+    [o] = source.parse(
+        [RawDocument("p", "u", json.dumps(page({"wonCategoryPrimary": "A/B"}), ensure_ascii=False).encode())],
+        today=TODAY,
+    )
+    assert o.category == "A/B"
 
 
 def test_pagination():

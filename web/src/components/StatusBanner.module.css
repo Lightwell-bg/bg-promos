@@ -1,0 +1,45 @@
+/* Positioned against the sticky <header>: overlays the content, never pushes it down. */
+.wrap {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 0;
+  pointer-events: none;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
+
+.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.danger {
+  background: var(--danger-bg);
+  color: #8c1c1c;
+}
+
+.retry {
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid currentColor;
+  background: transparent;
+  border-radius: 999px;
+  font-weight: 700;
+  color: inherit;
+}

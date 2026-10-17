@@ -1,0 +1,35 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--brand);
+  background: var(--brand-50);
+  color: var(--brand-600);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.clear {
+  min-height: var(--tap);
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--discount);
+  font-weight: 700;
+  font-size: 13px;
+}

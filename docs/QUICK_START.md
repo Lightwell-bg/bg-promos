@@ -34,6 +34,38 @@
    pytest -q
    ```
 
+Этап 2: запуск API и сайта локально (нужны шаги 1-5 выше и Node 22):
+
+1. Запустить API (venv активировано), окно 1:
+   ```bash
+   python -m uvicorn bg_promos.web.app:app --port 8001
+   ```
+2. Проверить API:
+   ```bash
+   curl -s http://127.0.0.1:8001/api/health
+   ```
+3. Установить зависимости фронтенда и запустить dev-сервер, окно 2 (прокси `/api` на порт 8001 настроен):
+   ```bash
+   cd web
+   npm install
+   npm run dev
+   ```
+4. Открыть http://localhost:5173 (откроется `/bg` или `/ru` по языку браузера).
+5. Необязательно: форма ошибок и аналитика. Для формы впишите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `.env`; для аналитики задайте `ga4_id` в `config.ini` секции `[web]` (пусто = выключено, баннера нет).
+6. Тесты фронтенда и продакшн-сборка (в папке `web`):
+   ```bash
+   npm test
+   npm run build
+   npm run preview
+   ```
+   Сборка делает prerender страниц, `sitemap.xml` и `robots.txt` в `web/dist`; предпросмотр на http://localhost:4173.
+7. Тесты бэкенда (из корня проекта, venv активировано):
+   ```bash
+   pytest -q
+   ```
+
+Выкатка этапа 2 на сервер: [DEPLOY.md](DEPLOY.md). Упаковка в магазины приложений: [MOBILE_STORES.md](MOBILE_STORES.md).
+
 Вариант Docker на VPS (Ubuntu, Docker уже установлен):
 
 1. Клонировать репозиторий проекта и перейти в папку:

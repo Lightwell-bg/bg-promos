@@ -1,0 +1,298 @@
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: var(--space-3);
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+}
+
+/* Search field that stays under the top bar while the page scrolls. */
+.sticky {
+  position: sticky;
+  top: calc(var(--top-h) + env(safe-area-inset-top));
+  z-index: 15;
+  margin: 0 calc(-1 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+}
+
+.section {
+  margin-top: var(--space-6);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.seeAll {
+  font-size: 14px;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.rail {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: var(--space-2);
+  margin: 0 calc(-1 * var(--space-3));
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+  scroll-padding-left: var(--space-3);
+  -webkit-overflow-scrolling: touch;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  text-align: left;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pill {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.pillOn {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* Chain pills: always one line (scrolls on very narrow screens) so the height is stable. */
+.chainPills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chainPills::-webkit-scrollbar {
+  display: none;
+}
+
+.chainPills > * {
+  flex: 0 0 auto;
+}
+
+/* Fixed-size category tile for the horizontal row (same pattern as the offer rails). */
+.cat {
+  flex: 0 0 96px;
+  scroll-snap-align: start;
+  height: 112px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  transition: transform 0.15s var(--ease);
+}
+
+.cat:active {
+  transform: scale(0.97);
+}
+
+.catIcon {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.catLabel {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  min-height: 2.5em;
+}
+
+.catCount {
+  color: var(--muted);
+  font-weight: 400;
+  min-height: 1.25em;
+}
+
+/* Skeleton pieces of the home page: same boxes as the real sections. */
+.skelTitle {
+  height: 25px;
+  width: 45%;
+  align-self: center;
+}
+
+.skelSeeAll {
+  min-height: var(--tap);
+  width: 72px;
+  display: block;
+}
+
+.skelSearch {
+  height: 48px;
+  width: 100%;
+  border-radius: 999px;
+}
+
+.skelCat {
+  flex: 0 0 96px;
+  height: 112px;
+  border-radius: var(--radius);
+}
+
+.skelPill {
+  min-height: var(--tap);
+  width: 84px;
+  border-radius: 999px;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--brand);
+  background: var(--surface);
+  color: var(--brand-600);
+  font-weight: 700;
+}
+
+.count {
+  background: var(--brand);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.select {
+  flex: 1;
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0 10px;
+}
+
+.resultCount {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 10px 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.linkCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 72px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.linkCardTitle {
+  font-weight: 700;
+}
+
+.linkCardDesc {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid var(--brand);
+  text-decoration: none;
+}
+
+.primaryBtn {
+  background: var(--brand);
+  color: #fff;
+}
+
+.secondaryBtn {
+  background: var(--surface);
+  color: var(--brand-600);
+}

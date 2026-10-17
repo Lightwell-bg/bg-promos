@@ -3,16 +3,17 @@
 Сборщики актуальных акционных предложений болгарских торговых сетей **Lidl**, **Kaufland** и **BILLA**.
 Предложения разбираются в единую модель, сохраняются в SQLite (с историей цен) и выгружаются в JSON-файлы.
 
-Документация: [Быстрый старт](docs/QUICK_START.md) | [Исследование источников](docs/SOURCES.md) | [Прогресс](docs/PROGRESS.md) | [English README](README.md)
+Документация: [Быстрый старт](docs/QUICK_START.md) | [Выкатка](docs/DEPLOY.md) | [API](docs/API.md) | [Магазины приложений](docs/MOBILE_STORES.md) | [Исследование источников](docs/SOURCES.md) | [Прогресс](docs/PROGRESS.md) | [English README](README.md)
 
 ## Охват
 
 - **Этап 1 (готов):** сборщики для трёх сетей -> SQLite -> JSON-экспорт; запуск по расписанию; проверки полноты; признак устаревших данных.
-- **Будущие этапы (не начаты):** сопоставление одного товара между сетями, сравнение цен, пользовательский сервис поверх JSON/SQLite.
+- **Этап 2 (готов, выкатка ожидается):** публичный API только для чтения (FastAPI) и мобильное PWA (React + Vite + TypeScript) на `https://promos.centerai.eu`: каталог, поиск, фильтры, страницы категорий, брошюры, правовые страницы на болгарском и русском, форма сообщения об ошибке (Telegram), необязательная Google Analytics 4 с согласием, prerender при сборке для SEO.
+- **Будущие этапы (не начаты):** сопоставление одного товара между сетями, сравнение цен, уведомления, упаковка в магазины приложений ([docs/MOBILE_STORES.md](docs/MOBILE_STORES.md)).
 
 ## Стек
 
-Python 3.12+, `httpx` (HTTP), `beautifulsoup4` (HTML), `python-dotenv`, `tzdata`, SQLite (stdlib), `pytest`. Docker / Docker Compose на сервере.
+Python 3.12+, `httpx` (HTTP), `beautifulsoup4` (HTML), `python-dotenv`, `tzdata`, SQLite (stdlib, WAL), `pytest`. API: FastAPI + uvicorn. Фронтенд: React 18, Vite 5, TypeScript, `vite-plugin-pwa` (Workbox), Vitest; nginx в Docker отдаёт статическую сборку. Docker / Docker Compose на сервере.
 
 ## Структура проекта
 
@@ -26,11 +27,15 @@ src/bg_promos/
   http.py         вежливый HTTP-клиент (пауза, повторы, User-Agent с контактом)
   models.py       Offer / PriceCondition
   sources/        адаптеры lidl.py, kaufland.py, billa.py
+  web/            приложение FastAPI: каталог, категории, цены, report (Telegram), config
+web/              PWA (React + Vite + TS): src/pages, src/components, src/domain, src/platform,
+                  src/content/legal (правовые тексты BG/RU), src/seo, scripts/prerender.mjs,
+                  Dockerfile, nginx.conf, pwa-assets.config.ts
 tests/            набор pytest с сохранёнными фикстурами
-docs/             QUICK_START.md, SOURCES.md, PROGRESS.md
+docs/             QUICK_START.md, DEPLOY.md, API.md, MOBILE_STORES.md, SOURCES.md, PROGRESS.md
 config.ini        некритичные настройки
 .env.example      шаблон переменных окружения
-Dockerfile, docker-compose.yml
+Dockerfile, docker-compose.yml   сервисы: collector (cron), api (:8001), web (:8002)
 data/             (в .gitignore) база SQLite, архив сырых ответов, JSON-экспорт
 ```
 
@@ -43,6 +48,67 @@ data/             (в .gitignore) база SQLite, архив сырых отв�
 | BILLA | `https://ssbbilla.site/catalog/sedmichna-broshura` и `.../predstoyashta-broshura` | HTML (текстовая версия брошюры) | текущая и будущая брошюра |
 
 Подробности, соответствие полей и риски: [docs/SOURCES.md](docs/SOURCES.md).
+
+## Этап 2: публичный API и PWA
+
+Архитектура:
+
+```
+cron хоста --> collector (одноразовый) --> SQLite data/bg_promos.sqlite3 (WAL)
+                                                  |  только чтение
+браузер --HTTPS--> nginx хоста --> 127.0.0.1:8002  web (nginx: статика PWA + prerender-страницы)
+                                                     '-- /api/ --> api:8001 (FastAPI) -----'
+                                                           '-- Telegram Bot API (сообщения об ошибках)
+браузер --(только после согласия)--> Google Analytics 4
+```
+
+Контракт API: [docs/API.md](docs/API.md). Выкатка: [docs/DEPLOY.md](docs/DEPLOY.md). План упаковки в магазины: [docs/MOBILE_STORES.md](docs/MOBILE_STORES.md).
+
+Разработка бэкенда (venv активировано, см. ниже):
+
+```bash
+python -m uvicorn bg_promos.web.app:app --port 8001
+```
+
+Разработка фронтенда (Node 22; dev-сервер Vite проксирует `/api` на `127.0.0.1:8001`):
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest
+npm run build      # tsc + vite build + prerender (dist/, sitemap.xml, robots.txt)
+npm run preview    # http://localhost:4173 (отдаёт dist/, проксирует /api)
+npm run assets     # пересоздать иконки PWA из public/icon.svg (@vite-pwa/assets-generator)
+npm run og         # пересоздать public/og-image.png
+```
+
+`npm run build` пишет статические HTML-оболочки для `/bg`, `/ru`, `/<lang>/catalog|search|brochures`, `/<lang>/c/<category>` и `/<lang>/legal/<page>` (title, description, canonical, hreflang, Open Graph, JSON-LD на главных), а также `root.html` для `/`, `sitemap.xml` и `robots.txt`. Список категорий для этих страниц: `web/src/seo/categories.json` (должен совпадать с `src/bg_promos/web/categories.py`; это проверяет тест).
+
+Новые разделы `config.ini`:
+
+| Раздел | Ключ | Значение |
+|---|---|---|
+| web | `site_url` | Публичный адрес сайта (`https://promos.centerai.eu`) |
+| web | `cors_origins` | Разрешённые origin через запятую (сайт, `capacitor://localhost`, dev-серверы) |
+| web | `ga4_id` | Measurement ID Google Analytics 4 (`G-XXXXXXXXXX`); пусто = аналитика и баннер согласия выключены |
+| web | `contact_email`, `operator` | Показываются на правовых страницах и в конфиге API (`info@centerai.eu`, `CenterAI`) |
+| web | `report_hourly_per_ip`, `report_daily_per_ip`, `report_daily_global` | Антиспам-лимиты формы сообщений об ошибках |
+| web | `trusted_proxies` | Прокси, чьему `X-Forwarded-For` доверяем (IP / CIDR) |
+| brochures | `lidl`, `kaufland`, `billa` | Страница брошюры каждой сети (показывается в приложении) |
+| offers_urls | `lidl`, `kaufland`, `billa` | Страница акций каждой сети (запасная ссылка «к источнику») |
+
+Новые переменные окружения:
+
+| Переменная | Файл | Значение |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | `.env` | Telegram-бот для сообщений об ошибках; пусто = форма отвечает 503 |
+| `VITE_API_BASE` | `web/.env` (шаблон `web/.env.example`) | Абсолютный адрес API для нативных оболочек; пусто = тот же origin |
+
+### Подключение внешних сервисов (этап 2)
+
+- **Telegram Bot API** (сообщения об ошибках): откройте `@BotFather`, отправьте `/newbot`, токен впишите в `TELEGRAM_BOT_TOKEN`. Напишите своему боту, откройте `https://api.telegram.org/bot<TOKEN>/getUpdates` и скопируйте `chat.id` в `TELEGRAM_CHAT_ID`. Документация: https://core.telegram.org/bots/api. Пошагово: [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Google Analytics 4** (необязательно, только с согласием): создайте свойство на https://analytics.google.com, добавьте поток Web для `https://promos.centerai.eu`, скопируйте Measurement ID (`G-...`) в `config.ini`, `[web] ga4_id`. Поставьте срок хранения данных 14 месяцев и отключите Google signals. До согласия посетителя ничего от Google не загружается. Документация: https://support.google.com/analytics/answer/9304153.
 
 ## Виртуальное окружение и установка
 
@@ -105,6 +171,7 @@ pip install -r requirements-dev.txt && pip install -e .
 | `BG_PROMOS_DATA_DIR` | Необязательное переопределение `data_dir` (пусто = брать из `config.ini`) |
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (по умолчанию `INFO`) |
 | `BG_PROMOS_CONFIG` | Необязательный путь к `config.ini` (нет в `.env.example`; Docker-образ ставит `/app/config.ini`) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Этап 2: Telegram-бот для сообщений об ошибках (пусто = форма отключена) |
 
 ```bash
 cp .env.example .env
@@ -221,7 +288,8 @@ python -m bg_promos --config /path/config.ini stats
 ## Тесты
 
 ```bash
-pytest -q
+pytest -q                          # бэкенд (сборщики, API)
+cd web && npm test                 # фронтенд (Vitest)
 ```
 
 ## Docker и развёртывание (VPS, Ubuntu + Docker Compose)
@@ -241,3 +309,15 @@ crontab -e   # добавить строку из раздела «Распис�
 ```
 
 `<repository-url>` - адрес вашего git-репозитория с этим проектом. Образ работает от пользователя `app` (uid 1000), `config.ini` и `data/` монтируются с хоста (`data_dir` разрешается в `/app/data`). Проверка: `stats` показывает `last run: ok` по всем сетям, а файл `data/export/offers_current.json` существует. Обновление: `git pull && docker compose build`.
+
+Сервисы этапа 2 (`api` на `127.0.0.1:8001`, `web` на `127.0.0.1:8002`) запускаются отдельно и не затрагивают collector и cron:
+
+```bash
+docker compose build api web && docker compose up -d api web
+curl -s http://127.0.0.1:8001/api/health
+curl -I http://127.0.0.1:8002/
+```
+
+Nginx хоста для `promos.centerai.eu` проксирует всё на `127.0.0.1:8002`; полная процедура (проверка портов, Telegram, GA4, nginx, сертификат) в [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Правовые тексты в `web/src/content/legal/` являются шаблоном, а не юридической консультацией.

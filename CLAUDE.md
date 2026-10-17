@@ -177,4 +177,5 @@ no invented placeholders, and end with a verification command.
 - BILLA source is ssbbilla.site (official text brochure for visually impaired). User decision (2026-10-17): use it politely despite robots.txt `Disallow: /`; document the restriction, do not discuss again, never bypass technical blocks (no proxies, UA rotation or captcha solving).
 - Politeness: identifying User-Agent with contact, ~1 s delay between requests, retries with backoff only for 429/5xx/timeouts; on 403 stop the chain and report.
 - Completeness guard: below `min_expected_offers` or below `min_ratio` × median of recent ok runs → run is `suspicious`, offers not saved, export keeps the last good data marked `stale`.
+- Local servers started by agents (uvicorn, vite preview) are stopped by their own PID/job only — never `taskkill /IM python.exe`/`node.exe` or other kill-by-name (2026-10-17: it may have killed the user's other processes).
 - Stage 1 scope only: collection + SQLite + JSON export. No mobile UI, matching across chains, notifications, until the user approves the next stage.

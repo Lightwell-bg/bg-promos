@@ -1,0 +1,87 @@
+.shimmer {
+  background: linear-gradient(90deg, #e8eef1 0%, #f5f8f9 50%, #e8eef1 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border-top: 3px solid transparent;
+  overflow: hidden;
+}
+
+.rail {
+  flex: 0 0 168px;
+}
+
+.railRow {
+  display: flex;
+  gap: var(--space-3);
+  overflow: hidden;
+  margin-top: var(--space-3);
+}
+
+.image {
+  aspect-ratio: 1 / 1;
+  border-radius: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  /* Same minimum as the real card body (OfferCard.module.css). */
+  min-height: var(--card-body-min);
+}
+
+.badge {
+  width: 48px;
+  height: 18px;
+}
+
+.line {
+  height: 14px;
+  width: 100%;
+}
+
+.lineShort {
+  height: 14px;
+  width: 60%;
+}
+
+.price {
+  height: 26px;
+  width: 50%;
+}
+
+.heading {
+  height: 22px;
+  width: 55%;
+  margin-top: var(--space-4);
+}
+
+.detailImage {
+  aspect-ratio: 1 / 1;
+  max-height: 360px;
+  width: 100%;
+  border-radius: var(--radius);
+}

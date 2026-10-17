@@ -154,7 +154,9 @@ class LidlSource:
             prices=prices,
             brand=(g.get("brand") or {}).get("name") or None,
             description=_plain_text(keyfacts.get("description")),
-            category=g.get("category") or keyfacts.get("wonCategoryPrimary") or None,
+            # The "won" category path ("World/Group/.../Leaf") is far more specific than the
+            # coarse g["category"] ("Хранителни"); keep the latter only as a fallback.
+            category=keyfacts.get("wonCategoryPrimary") or g.get("category") or None,
             unit_text=(price.get("packaging") or {}).get("text") or _lp_unit(g),
             image_url=g.get("image") or None,
             product_url=f"{SITE}{path}" if path else None,

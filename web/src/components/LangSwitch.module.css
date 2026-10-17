@@ -1,0 +1,21 @@
+.group {
+  display: inline-flex;
+  border: 1px solid var(--brand-600);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.btn {
+  min-width: var(--tap);
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--brand-600);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.on {
+  background: var(--brand-600);
+  color: #fff;
+}

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 64" width="250" height="64" role="img" aria-label="BG Promos">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0BA5B5"/>
+      <stop offset="1" stop-color="#087F8C"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2BC3D1"/>
+      <stop offset="1" stop-color="#087F8C"/>
+    </linearGradient>
+    <linearGradient id="tag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF6B35"/>
+      <stop offset="1" stop-color="#E5383B"/>
+    </linearGradient>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#13212B" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <svg x="0" y="0" width="64" height="64" viewBox="72 62 368 410">
+    <path d="M150 238 C150 120 362 120 362 238" fill="none" stroke="#066A75" stroke-width="26" stroke-linecap="round"/>
+    <path d="M118 252 H394 L364 406 Q360 428 338 428 H174 Q152 428 148 406 Z" fill="url(#body)"/>
+    <g stroke="#FFFFFF" stroke-opacity="0.26" stroke-width="14" stroke-linecap="round">
+      <line x1="196" y1="282" x2="204" y2="402"/>
+      <line x1="256" y1="282" x2="256" y2="402"/>
+      <line x1="316" y1="282" x2="308" y2="402"/>
+    </g>
+    <rect x="88" y="214" width="336" height="46" rx="23" fill="url(#rim)"/>
+    <rect x="104" y="222" width="304" height="8" rx="4" fill="#FFFFFF" opacity="0.4"/>
+    <g transform="translate(352 132) rotate(18)" filter="url(#drop)">
+      <path d="M-60 0 L-30 -38 H48 A12 12 0 0 1 60 -26 V26 A12 12 0 0 1 48 38 H-30 Z" fill="url(#tag)"/>
+      <path d="M-30 -38 H48 A12 12 0 0 1 60 -26 V-18 H-44 Z" fill="#FFFFFF" opacity="0.2"/>
+      <circle cx="-28" cy="0" r="7" fill="#FFFFFF"/>
+      <circle cx="12" cy="-12" r="8" fill="none" stroke="#FFFFFF" stroke-width="6"/>
+      <circle cx="40" cy="12" r="8" fill="none" stroke="#FFFFFF" stroke-width="6"/>
+      <line x1="42" y1="-18" x2="10" y2="18" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </svg>
+  <text x="74" y="43" font-family="'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif" font-size="32" font-weight="800" letter-spacing="-0.5">
+    <tspan fill="#066A75">BG</tspan><tspan fill="#13212B" dx="7">Promos</tspan>
+  </text>
+</svg>

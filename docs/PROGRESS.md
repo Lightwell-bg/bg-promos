@@ -1,5 +1,29 @@
 # Прогресс
 
+## Этап 2: публичный API и PWA (разработка завершена, выкатка не выполнена)
+
+Сделано:
+- API (FastAPI): каталог с ETag, категории, цены, `/api/v1/config`, форма сообщений об ошибках (Telegram, антиспам); ключ кеша каталога включает текущий час UTC, поэтому флаги `stale` обновляются раз в час;
+- PWA (React + Vite + TS): главная, каталог, поиск, фильтры, офлайн-кеш, брошюры, карточка предложения; рейка «Новые предложения» исключает первоначальный импорт сети (функция `domain/newOffers.ts`); кнопка «Назад» возвращает в каталог, если истории внутри приложения нет;
+- страницы категорий `/:lang/c/:category` (канонические для SEO), плитки на главной ведут на них;
+- логотип и иконки нарисованы вручную (SVG), PNG сгенерированы `@vite-pwa/assets-generator`, `og-image.png` 1200x630;
+- дизайн: шкала отступов, карточки 1:1, иерархия цены, акценты сетей, скелетоны, пустые состояния, плавный bottom sheet, закреплённый поиск, safe-area, контраст AA, focus ring, `prefers-reduced-motion`;
+- SEO: prerender при сборке (`web/scripts/prerender.mjs`): 50 страниц + `root.html`, `sitemap.xml` (51 URL с hreflang), `robots.txt`; сервис-воркер: precache только оболочки, навигации network-first с запасным `index.html`;
+- GA4 с Consent Mode v2: ничего от Google до согласия, баннер и переключатель на странице cookies, согласие хранится 12 месяцев, при отзыве удаляются cookies `_ga`;
+- правовые страницы BG/RU (privacy, cookies, terms, contacts): шаблон, не юридическая консультация;
+- Docker: `web/Dockerfile` (node:22-alpine -> nginx:1.27-alpine), `web/nginx.conf` (CSP, кеширование, прокси `/api/`), сервис `web` в `docker-compose.yml`;
+- документация: DEPLOY.md, MOBILE_STORES.md, README (EN/RU), QUICK_START.
+
+Проверено:
+- pytest и vitest проходят, `npm run build` проходит;
+- локально: API на 8001 и `npm run preview` на 4173, главная и `/api/v1/catalog` через прокси.
+
+Не проверено / осталось:
+- сборка образа `web` и `docker compose config` (Docker на машине разработки отсутствует);
+- выкатка на VPS (DEPLOY.md), настройка nginx хоста и сертификата, токен Telegram, Measurement ID GA4;
+- юридическая проверка текстов;
+- упаковка в магазины (MOBILE_STORES.md) не начата.
+
 ## Этап 1: сборщики Lidl / Kaufland / BILLA -> SQLite -> JSON (готов)
 
 Сделано:

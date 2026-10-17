@@ -37,6 +37,28 @@ def make_offer(
     )
 
 
+def seed(settings: Settings, chain: str, offers: list[Offer], status: str = "ok") -> int:
+    """Write one finished run with ``offers`` into the settings' database; returns the run id."""
+    from bg_promos.storage import Storage
+
+    with Storage(settings.db_path) as st:
+        run_id = st.start_run(chain)
+        st.save_offers(run_id, chain, offers)
+        st.finish_run(run_id, status, offers_count=len(offers), error=None if status == "ok" else "boom")
+    return run_id
+
+
+@pytest.fixture
+def web_settings(settings: Settings) -> Settings:
+    settings.brochure_urls = {"lidl": "https://example.test/lidl-brochure"}
+    settings.offers_urls = {
+        "lidl": "https://example.test/lidl/",
+        "kaufland": "https://example.test/kaufland/",
+        "billa": "https://example.test/billa/",
+    }
+    return settings
+
+
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     return Settings(

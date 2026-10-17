@@ -38,6 +38,28 @@ class Settings:
     max_retries_per_slot: int = 3
     chains: dict[str, ChainSettings] = field(default_factory=dict)
     log_level: str = "INFO"
+    # ---- web API (stage 2) ----
+    site_url: str = "https://promos.centerai.eu"
+    cors_origins: tuple[str, ...] = (
+        "https://promos.centerai.eu",
+        "capacitor://localhost",
+        "https://localhost",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    )
+    ga4_id: str = ""
+    contact_email: str = "info@centerai.eu"
+    operator: str = "CenterAI"
+    report_hourly_per_ip: int = 5
+    report_daily_per_ip: int = 20
+    report_daily_global: int = 100
+    trusted_proxies: tuple[str, ...] = (
+        "127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    )
+    brochure_urls: dict[str, str] = field(default_factory=dict)
+    offers_urls: dict[str, str] = field(default_factory=dict)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     @property
     def tz(self) -> ZoneInfo:
@@ -88,8 +110,39 @@ def load(path: str | os.PathLike[str] | None = None) -> Settings:
                 options={k: v for k, v in sec.items() if k not in ("enabled", "min_expected_offers")},
             )
 
+    w = cp["web"] if "web" in cp else {}
+    defaults = Settings(data_dir=data_dir)
+
+    def web_list(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        raw = w.get(key) if w else None
+        if raw is None:
+            return default
+        return tuple(x.strip() for x in raw.split(",") if x.strip())
+
+    def web_int(key: str, default: int) -> int:
+        return int(w.get(key)) if w and w.get(key, "").strip() else default
+
+    def web_str(key: str, default: str) -> str:
+        return w.get(key, default).strip() if w else default
+
+    def section(name: str) -> dict[str, str]:
+        return {k: v.strip() for k, v in cp[name].items() if v.strip()} if name in cp else {}
+
     return Settings(
         data_dir=data_dir,
+        site_url=web_str("site_url", defaults.site_url),
+        cors_origins=web_list("cors_origins", defaults.cors_origins),
+        ga4_id=web_str("ga4_id", ""),
+        contact_email=web_str("contact_email", defaults.contact_email),
+        operator=web_str("operator", defaults.operator),
+        report_hourly_per_ip=web_int("report_hourly_per_ip", defaults.report_hourly_per_ip),
+        report_daily_per_ip=web_int("report_daily_per_ip", defaults.report_daily_per_ip),
+        report_daily_global=web_int("report_daily_global", defaults.report_daily_global),
+        trusted_proxies=web_list("trusted_proxies", defaults.trusted_proxies),
+        brochure_urls=section("brochures"),
+        offers_urls=section("offers_urls"),
+        telegram_bot_token=(os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip(),
+        telegram_chat_id=(os.environ.get("TELEGRAM_CHAT_ID") or "").strip(),
         timezone=g.get("timezone", "Europe/Sofia"),
         contact=g.get("contact", ""),
         raw_retention_days=g.getint("raw_retention_days", fallback=14),
