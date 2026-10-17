@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import sys
+from urllib.parse import urlsplit
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -93,6 +94,19 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
+async def ensure_polling_mode(bot: Bot) -> None:
+    """Telegram does not deliver updates via getUpdates while a webhook is set on the token, so
+    the bot would stay silent. Remove a webhook left by an earlier setup (pending updates kept)
+    and log only its host. Profile, commands and menu button (BotFather) are not touched."""
+    me = await bot.get_me()
+    log.info("bot @%s started (long polling)", me.username)
+    info = await bot.get_webhook_info()
+    if info.url:
+        host = urlsplit(info.url).hostname or "?"
+        log.warning("webhook was set (host %s): removing it, the bot uses long polling", host)
+        await bot.delete_webhook(drop_pending_updates=False)
+
+
 async def run(token: str) -> None:
     bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = build_dispatcher()
@@ -104,6 +118,7 @@ async def run(token: str) -> None:
         except NotImplementedError:  # Windows event loop
             signal.signal(sig, lambda *_: loop.call_soon_threadsafe(stop.set))
 
+    await ensure_polling_mode(bot)
     polling = asyncio.create_task(
         dp.start_polling(
             bot,

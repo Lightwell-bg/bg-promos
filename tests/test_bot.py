@@ -231,5 +231,29 @@ async def test_polling_not_handled_as_tasks(monkeypatch):
     dp.start_polling = AsyncMock()
     dp.stop_polling = AsyncMock()
     monkeypatch.setattr(bot_main, "build_dispatcher", lambda: dp)
+    monkeypatch.setattr(bot_main, "ensure_polling_mode", AsyncMock())
     await bot_main.run("123456:" + "A" * 35)
     assert dp.start_polling.await_args.kwargs["handle_as_tasks"] is False
+
+
+@sync
+async def test_webhook_is_removed_before_polling(caplog):
+    bot = MagicMock()
+    bot.get_me = AsyncMock(return_value=MagicMock(username="promoseubot"))
+    bot.get_webhook_info = AsyncMock(return_value=MagicMock(url="https://n8n.example.org/webhook/secret-path"))
+    bot.delete_webhook = AsyncMock()
+    with caplog.at_level(logging.INFO, logger="bg_promos.bot"):
+        await bot_main.ensure_polling_mode(bot)
+    bot.delete_webhook.assert_awaited_once_with(drop_pending_updates=False)
+    assert "n8n.example.org" in caplog.text
+    assert "secret-path" not in caplog.text  # only the host is logged
+
+
+@sync
+async def test_no_webhook_nothing_deleted():
+    bot = MagicMock()
+    bot.get_me = AsyncMock(return_value=MagicMock(username="promoseubot"))
+    bot.get_webhook_info = AsyncMock(return_value=MagicMock(url=""))
+    bot.delete_webhook = AsyncMock()
+    await bot_main.ensure_polling_mode(bot)
+    bot.delete_webhook.assert_not_awaited()
