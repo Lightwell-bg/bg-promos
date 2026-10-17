@@ -76,3 +76,19 @@ def test_category_table_is_consistent():
     assert len(ids) == len(set(ids)) and "other" in CATEGORY_IDS
     for _id, bg, ru, icon in CATEGORIES:
         assert bg and ru and icon
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("Fanta портокал", "drinks"),
+        ("Coca-Cola", "drinks"),
+        ("Milka шоколад", "sweets_snacks"),
+    ],
+)
+def test_latin_brands(name, expected):
+    assert classify("billa", None, name) == expected
+
+
+def test_latin_brand_stem_matches_whole_words_only():
+    assert classify("billa", None, "Fantasy Foods Панирани топени сиренца") != "drinks"

@@ -78,6 +78,19 @@ def parse_quantity(unit_text: str | None, name: str = "") -> Quantity | None:
     return Quantity(base, amount, False)
 
 
+def sale_unit(unit_text: str | None) -> str:
+    """How the price is quoted, from the source's unit text only (never guessed from the name):
+    "kg" / "l" when the chain states the price is per kg/l ("За 1 кг", "за kg", "кг"),
+    otherwise "piece" (a pack or an item)."""
+    # "1 кг" / "1 л" is a pre-packed item of that size (sugar 1 кг, milk 1 л) -> piece.
+    u = _norm(unit_text or "")
+    if re.fullmatch(r"(?:(?:за|по)\s*(?:1\s*)?(?:kg|кг)|(?:kg|кг))\.?", u):
+        return "kg"
+    if re.fullmatch(r"(?:за|по)\s*(?:1\s*)?(?:l|л)\.?", u):
+        return "l"
+    return "piece"
+
+
 def unit_price(per_item_cents: float, unit_text: str | None, name: str = "") -> dict | None:
     """Price per kg/l for one pack costing ``per_item_cents``; None when unreliable."""
     q = parse_quantity(unit_text, name)

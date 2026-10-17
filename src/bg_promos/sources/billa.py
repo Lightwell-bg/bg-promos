@@ -149,9 +149,16 @@ def parse_brochure(html: str, url: str = "", *, required: bool = True) -> list[O
     return offers
 
 
+# The source sometimes glues two quantity fields without a space ("За 1 кг1 бр."): split a
+# unit word from a directly following number so the unit regex sees two quantities.
+_GLUED_UNIT_RE = re.compile(r"(?<![а-яa-z])(кг|гр|мл|бр\.|г|л)(?=\d)", re.I)
+
+
 def _row_text(row: Tag) -> str:
     el = row.select_one("div.actualProduct")
-    return " ".join(el.get_text(" ").split()) if el else ""
+    if not el:
+        return ""
+    return _GLUED_UNIT_RE.sub(r"\1 ", " ".join(el.get_text(" ").split()))
 
 
 def _period_from_header(m: re.Match) -> tuple[date, date]:

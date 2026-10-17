@@ -23,6 +23,7 @@ from ..storage import Storage
 from .categories import CATEGORIES, classify
 from .db import read_storage
 from .pricing import _condition, derive
+from .units import sale_unit
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +101,67 @@ def _public_offer(settings: Settings, row: dict[str, Any]) -> dict[str, Any]:
         "regular_cents": regular,
         "savings_per_item_cents": derived["savings_per_item_cents"],
         "unit_price": derived["unit_price"],
+        "sale_unit": sale_unit(row["unit_text"]),
+        "alt_ids": [],
     }
+
+
+def _norm_text(v: str | None) -> str:
+    return " ".join((v or "").lower().replace("\xa0", " ").split())
+
+
+def _overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Same validity window only: a merely overlapping period would lend a price outside the
+    dates it is valid for (e.g. an offer starting later)."""
+    return (a["valid_from"], a["valid_to"]) == (b["valid_from"], b["valid_to"])
+
+
+def merge_equivalent_offers(offers: list[dict[str, Any]]) -> None:
+    """Chains sometimes list the SAME goods twice in one period (e.g. Lidl: one tile with the
+    Lidl Plus price, another with the price for everyone, under different product ids).
+    Offers are equivalent only when chain, name, description, pack size and brand match
+    exactly (normalised whitespace/case) and their validity overlaps - a similar name is not
+    enough. Each such offer gets the union of the group's price conditions (one regular price),
+    re-derived best/no_card/savings/unit price, and `alt_ids` of its equivalents; so the cart
+    and the offer page use the cheapest applicable price, with or without the card."""
+    groups: dict[tuple, list[dict[str, Any]]] = {}
+    for o in offers:
+        key = (o["chain"], _norm_text(o["name"]), _norm_text(o["description"]), _norm_text(o["unit_text"]),
+               _norm_text(o["brand"]))
+        groups.setdefault(key, []).append(o)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        originals = {o["id"]: [dict(p) for p in o["prices"]] for o in group}
+        for o in group:
+            peers = [p for p in group if p is not o and _overlap(o, p)]
+            if not peers:
+                continue
+            merged = [dict(p) for p in originals[o["id"]]]
+            own_regular = any(p["kind"] == "regular" for p in merged)
+            seen = {(p["kind"], p["program"], p["min_qty"], p["total_cents"]) for p in merged}
+            for peer in peers:
+                for p in originals[peer["id"]]:
+                    if p["kind"] == "regular" and own_regular:
+                        continue
+                    k = (p["kind"], p["program"], p["min_qty"], p["total_cents"])
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    merged.append(dict(p))
+                    own_regular = own_regular or p["kind"] == "regular"
+            derived = derive(
+                [{"kind": p["kind"], "program": p["program"], "min_qty": p["min_qty"], "price_cents": p["total_cents"],
+                  "discount_pct": p["discount_pct"], "condition_text": p["text"]} for p in merged],
+                o["unit_text"], o["name"],
+            )
+            o["prices"] = merged
+            o["alt_ids"] = sorted(p["id"] for p in peers)
+            o["best"] = derived["best"]
+            o["no_card"] = derived["no_card"]
+            o["regular_cents"] = derived["regular_cents"]
+            o["savings_per_item_cents"] = derived["savings_per_item_cents"]
+            o["unit_price"] = derived["unit_price"]
 
 
 def chains_block(storage: Storage, settings: Settings, now: datetime) -> dict[str, dict[str, Any]]:
@@ -134,6 +195,7 @@ def _build(settings: Settings, now: datetime) -> tuple[dict[str, Any], CacheKey]
             block = chains_block(storage, settings, now)
         finally:
             storage.conn.rollback()
+    merge_equivalent_offers(offers)
     offers.sort(key=lambda o: (o["chain"], o["name"], o["id"]))
     catalog = {
         "version": CATALOG_VERSION,

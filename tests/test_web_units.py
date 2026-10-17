@@ -61,3 +61,18 @@ def test_name_with_same_size_is_accepted():
 @pytest.mark.parametrize("per_item, unit_text", [(1, "5 кг"), (0, "400 г"), (-5, "400 г"), (10_000_000, "100 г")])
 def test_sanity_bounds(per_item, unit_text):
     assert unit_price(per_item, unit_text, "Продукт") is None
+
+
+@pytest.mark.parametrize(
+    "unit_text,expected",
+    [
+        ("За 1 кг", "kg"), ("за kg", "kg"), ("по kg", "kg"), ("кг", "kg"), ("kg", "kg"),
+        ("за 1 л", "l"), ("по 1 л", "l"),
+        ("1 кг", "piece"), ("1 л", "piece"), ("120 g/бр.", "piece"), ("1 бр.", "piece"),
+        ("400 г", "piece"), (None, "piece"), ("", "piece"),
+    ],
+)
+def test_sale_unit(unit_text, expected):
+    from bg_promos.web.units import sale_unit
+
+    assert sale_unit(unit_text) == expected

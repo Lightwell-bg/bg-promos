@@ -8,11 +8,13 @@ import { OfferImage } from "../components/OfferImage";
 import { QtyStepper } from "../components/QtyStepper";
 import { useCart } from "../data/CartContext";
 import { useCatalog } from "../data/CatalogContext";
-import { hasCard } from "../domain/cart";
+import { WeightStepper } from "../components/WeightStepper";
+import { gramsOf, hasCard, isWeightLine, WEIGHT_PRESETS } from "../domain/cart";
+import { formatWeight } from "../domain/weight";
 import type { ChainGroup, ReconciledLine } from "../domain/cart";
 import { canShare, encodeStartParam, telegramStartLink } from "../domain/carts";
 import { useConfig } from "../data/ConfigContext";
-import { conditionChips, formatEUR, priceModel } from "../domain/price";
+import { conditionChips, formatEUR, priceModel, unitKey } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
 import { setTitle } from "../platform/document";
@@ -59,8 +61,8 @@ export function Cart() {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [note, setNote] = useState("");
   const config = useConfig();
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [shareIsTg, setShareIsTg] = useState(false);
+  const [links, setLinks] = useState<{ tg: string | null; web: string } | null>(null);
+  const [copyNote, setCopyNote] = useState<{ block: "tg" | "web"; ok: boolean } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [importNote, setImportNote] = useState<ImportNote | null>(() => noteOf(location.state));
@@ -90,55 +92,75 @@ export function Cart() {
       setNote(t("cart.shareFailed"));
       return;
     }
-    // Preferred: a t.me link that opens the bot's Mini App directly; the web link is the fallback
-    // (no bot configured, or the list does not fit into the 512-char startapp parameter).
+    // Two links: a t.me link that opens the bot's Mini App directly (needs a configured bot and a list
+    // that fits into the 512-char startapp parameter) and the plain web link for the browser.
     const param = config.telegram_bot ? encodeStartParam(cart.state) : null;
     const tgLink = config.telegram_bot && param ? telegramStartLink(config.telegram_bot, param) : null;
-    setShareIsTg(tgLink !== null);
-    setShareUrl(tgLink ?? webUrl);
+    setCopyNote(null);
+    setLinks({ tg: tgLink, web: webUrl });
   }
 
-  async function onCopy() {
-    if (!shareUrl) return;
-    setNote((await copyText(shareUrl)) ? t("cart.shareCopied") : t("cart.shareFailed"));
+  async function onCopy(block: "tg" | "web", url: string) {
+    setCopyNote({ block, ok: await copyText(url) });
   }
 
   async function onSystemShare() {
-    if (!shareUrl) return;
-    const result = await share({ title: t("app.name"), text: t("cart.shareText"), url: shareUrl });
+    if (!links) return;
+    const result = await share({ title: t("app.name"), text: t("cart.shareText"), url: links.tg ?? links.web });
     if (result === "copied") setNote(t("cart.shareCopied"));
   }
 
-  const sharePanel = shareUrl && (
+  function shareBlock(block: "tg" | "web", url: string) {
+    const title = t(block === "tg" ? "cart.shareBlockTelegram" : "cart.shareBlockWeb");
+    const feedback = copyNote?.block === block ? copyNote : null;
+    return (
+      <div className={styles.shareBlock} role="group" aria-label={title}>
+        <p className={styles.shareBlockTitle}>{title}</p>
+        <input
+          className={styles.shareInput}
+          readOnly
+          value={url}
+          aria-label={title}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <div className={styles.shareActions}>
+          {block === "tg" && (
+            <a
+              className={page.primaryBtn}
+              href={telegramShareUrl(url, t("cart.shareText"))}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t("cart.shareTelegram")}
+            </a>
+          )}
+          <button type="button" className={page.secondaryBtn} onClick={() => void onCopy(block, url)}>
+            {t("cart.copy")}
+          </button>
+        </div>
+        {feedback && (
+          <p role="status" className={feedback.ok ? styles.shareNote : styles.shareError}>
+            {feedback.ok ? t("cart.shareCopied") : t("cart.shareFailed")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const sharePanel = links && (
     <div className={styles.sharePanel} role="region" aria-label={t("cart.sharePanelTitle")}>
       <p className={styles.sharePanelTitle}>{t("cart.sharePanelTitle")}</p>
-      <input
-        className={styles.shareInput}
-        readOnly
-        value={shareUrl}
-        aria-label={t("cart.sharePanelTitle")}
-        onFocus={(e) => e.currentTarget.select()}
-      />
+      {links.tg && shareBlock("tg", links.tg)}
+      {shareBlock("web", links.web)}
       <p className={styles.shareHint}>{t("cart.shareHint")}</p>
-      {!shareIsTg && <p className={styles.shareHint}>{t("cart.shareLong")}</p>}
+      {!links.tg && <p className={styles.shareHint}>{t("cart.shareLong")}</p>}
       <div className={styles.shareActions}>
-        <a
-          className={page.primaryBtn}
-          href={telegramShareUrl(shareUrl, t("cart.shareText"))}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {t("cart.shareTelegram")}
-        </a>
-        <button type="button" className={page.secondaryBtn} onClick={() => void onCopy()}>
-          {t("cart.shareCopy")}
-        </button>
         {canNativeShare() && (
           <button type="button" className={page.secondaryBtn} onClick={() => void onSystemShare()}>
             {t("cart.shareSystem")}
           </button>
         )}
-        <button type="button" className={page.secondaryBtn} onClick={() => setShareUrl(null)}>
+        <button type="button" className={page.secondaryBtn} onClick={() => setLinks(null)}>
           {t("cart.shareClose")}
         </button>
       </div>
@@ -251,9 +273,14 @@ export function Cart() {
         ? t("cond.regular")
         : null;
     const approx = r.counted && price.approximate;
+    const weight = isWeightLine(line);
+    const grams = gramsOf(line);
+    const unitLabel = t(unitKey(line.saleUnit));
+    const perUnitCents = price.condition?.total_cents ?? r.offer?.regular_cents ?? line.snapshot.regular_cents;
+    const perKg = weight && total !== null && perUnitCents != null ? `${formatEUR(perUnitCents)}/${unitLabel}` : null;
     const perItem =
-      line.qty > 1 && total !== null
-        ? `${approx || total % line.qty !== 0 ? "≈ " : ""}${t("cart.perItem", { amount: formatEUR(Math.round(total / line.qty)) })}`
+      !weight && line.qty > 1 && total !== null
+        ? `${approx || total % line.qty !== 0 ? "≈ " : ""}${t("cart.perItem", { amount: formatEUR(Math.round(total / line.qty)), unit: t(unitKey(line.saleUnit)) })}`
         : null;
     return (
       <li key={line.offerId} className={`${styles.line} ${ended ? styles.ended : ""}`}>
@@ -283,7 +310,11 @@ export function Cart() {
           {chip && <span className={styles.chip}>{chip}</span>}
 
           <div className={styles.lineFoot}>
-            <QtyStepper qty={line.qty} onChange={(q) => onQty(line.offerId, q)} compact />
+            {weight ? (
+              <WeightStepper grams={grams} onChange={(g) => cart.setGrams(line.offerId, g)} unit={unitLabel} compact />
+            ) : (
+              <QtyStepper qty={line.qty} onChange={(q) => onQty(line.offerId, q)} compact />
+            )}
             <div className={styles.amounts}>
               {total !== null ? (
                 <strong className={`${styles.total} ${ended ? styles.struck : ""}`} data-testid="line-total">
@@ -294,8 +325,28 @@ export function Cart() {
                 <span className={styles.noPrice}>{t("cart.noPrice")}</span>
               )}
               {perItem && <span className={styles.perItem}>{perItem}</span>}
+              {perKg && (
+                <span className={styles.perItem} data-testid="line-per-kg">
+                  {perKg}
+                </span>
+              )}
             </div>
           </div>
+          {weight && (
+            <div className={styles.presets} role="group" aria-label={t("cart.weightPresets")}>
+              {WEIGHT_PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`${styles.listChip} ${grams === p ? styles.listChipActive : ""}`}
+                  aria-pressed={grams === p}
+                  onClick={() => cart.setGrams(line.offerId, p)}
+                >
+                  {formatWeight(p, unitLabel)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {r.priceChanged && r.offer && (
             <div className={`${styles.notice} ${styles.warn}`}>

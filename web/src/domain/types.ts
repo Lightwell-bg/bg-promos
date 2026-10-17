@@ -53,7 +53,13 @@ export interface Offer {
   regular_cents: number | null;
   savings_per_item_cents: number | null;
   unit_price: UnitPrice | null;
+  /** How the price is quoted. Missing in old cached catalogs: treat as "piece" (see saleUnitOf). */
+  sale_unit: SaleUnit;
+  /** Ids of equivalent offers of the same chain (their prices are already merged into this one). */
+  alt_ids: string[];
 }
+
+export type SaleUnit = "kg" | "l" | "piece";
 
 export interface ChainInfo {
   name: string;

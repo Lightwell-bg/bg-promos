@@ -255,3 +255,68 @@ def test_reader_does_not_lock_against_wal_writer(web_settings):
     final = json.loads(cache.get(NOW)[0])
     assert len(final["offers"]) == 150
     assert {o["name"] for o in final["offers"]} == {f"run{runs - 1}"}
+
+
+# ---- merge_equivalent_offers -------------------------------------------------------------------
+
+def _banitsa(key, prices, name="Баница", description="Със сирене и спанак", unit="120 g/бр.",
+             valid_from=date(2026, 10, 12), valid_to=date(2026, 10, 18)):
+    from bg_promos.models import Offer
+
+    return Offer(chain="lidl", source_key=key, product_ref=f"ref-{key}", name=name, valid_from=valid_from,
+                 valid_to=valid_to, prices=prices, description=description, unit_text=unit)
+
+
+def _banitsa_pair(**b_kwargs):
+    a = _banitsa("A", [PriceCondition("regular", 89), PriceCondition("loyalty", 41, program="lidl_plus")])
+    b = _banitsa("B", [PriceCondition("regular", 89), PriceCondition("promo", 65)], **b_kwargs)
+    return a, b
+
+
+def _find(cat, key, vf="2026-10-12", vt="2026-10-18"):
+    oid = offer_id("lidl", key, vf, vt)
+    return next(o for o in cat["offers"] if o["id"] == oid)
+
+
+def test_equivalent_lidl_offers_are_merged(web_settings):
+    a, b = _banitsa_pair()
+    seed(web_settings, "lidl", [a, b])
+    cat = build_catalog(web_settings, NOW)
+    oa, ob = _find(cat, "A"), _find(cat, "B")
+    for o in (oa, ob):
+        kinds = sorted((p["kind"], p["total_cents"]) for p in o["prices"])
+        assert kinds == [("loyalty", 41), ("promo", 65), ("regular", 89)]
+        assert o["best"]["kind"] == "loyalty" and o["best"]["total_cents"] == 41
+        assert o["no_card"]["kind"] == "promo" and o["no_card"]["total_cents"] == 65
+        assert o["regular_cents"] == 89
+        assert o["sale_unit"] == "piece"
+    assert oa["alt_ids"] == [ob["id"]]
+    assert ob["alt_ids"] == [oa["id"]]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"description": "Със сирене"},
+        {"unit": "150 g/бр."},
+        {"name": "Баница с тиква"},
+        {"valid_from": date(2026, 10, 19), "valid_to": date(2026, 10, 25)},
+        # overlapping but not identical windows: never lend a price outside its own dates
+        {"valid_from": date(2026, 10, 15), "valid_to": date(2026, 10, 18)},
+    ],
+)
+def test_not_merged_when_something_differs(web_settings, kwargs):
+    a, _ = _banitsa_pair()
+    b = _banitsa("B", [PriceCondition("regular", 89), PriceCondition("promo", 65)], **kwargs)
+    seed(web_settings, "lidl", [a, b])
+    cat = build_catalog(web_settings, NOW)
+    assert len(cat["offers"]) == 2
+    assert all(o["alt_ids"] == [] for o in cat["offers"])
+    oa = next(o for o in cat["offers"] if o["id"] == offer_id("lidl", "A", "2026-10-12", "2026-10-18"))
+    assert sorted(p["kind"] for p in oa["prices"]) == ["loyalty", "regular"]
+
+
+def test_single_offer_has_empty_alt_ids(web_settings):
+    seed(web_settings, "lidl", [make_offer(key="solo")])
+    [o] = build_catalog(web_settings, NOW)["offers"]
+    assert o["alt_ids"] == [] and o["sale_unit"] == "piece"

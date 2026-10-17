@@ -10,7 +10,7 @@
 // - Ended offers (missing from the catalog or valid_to < today) are NOT counted in totals.
 // - Upcoming offers (valid_from > today) are counted and flagged.
 import { status } from "./dates";
-import type { Catalog, ChainId, Offer, PriceCondition, Program } from "./types";
+import type { Catalog, ChainId, Offer, PriceCondition, Program, SaleUnit } from "./types";
 import { CHAIN_IDS } from "./types";
 
 export const CART_VERSION = 1;
@@ -37,8 +37,13 @@ export interface CartLine {
   name: string;
   imageUrl: string | null;
   unitText: string | null;
+  /** How the price is quoted (snapshot of offer.sale_unit); old stored lines have no value = "piece". */
+  saleUnit: SaleUnit;
   category: string;
+  /** Pieces for "piece" lines; always 1 for weight lines (their amount is `grams`). */
   qty: number;
+  /** Weight/volume lines (saleUnit kg|l) only: integer grams (or ml), WEIGHT_MIN..WEIGHT_MAX. */
+  grams?: number;
   addedAt: string;
   /** Prices as seen when the line was added (or last accepted); used to detect changes. */
   snapshot: CartSnapshot;
@@ -77,6 +82,71 @@ function usable(c: PriceCondition, chain: ChainId, cards: CartState["cards"]): b
 /** Card prices are used unless the user switched this chain's card off. */
 export function hasCard(cards: CartState["cards"], chain: ChainId): boolean {
   return cards[chain] !== false;
+}
+
+// ---------------------------------------------------------------- weight (owner decision 2026-10-18)
+// Stepper of 100 g plus quick buttons 250 / 500 / 1000 g; no free-text input.
+export const WEIGHT_STEP = 100;
+export const WEIGHT_MIN = 100;
+export const WEIGHT_MAX = 20_000;
+export const WEIGHT_PRESETS = [250, 500, 1000] as const;
+
+export function isWeightLine(line: Pick<CartLine, "saleUnit">): boolean {
+  return line.saleUnit === "kg" || line.saleUnit === "l";
+}
+
+export function clampGrams(g: number): number {
+  if (!Number.isFinite(g)) return 1000;
+  return Math.min(WEIGHT_MAX, Math.max(WEIGHT_MIN, Math.round(g)));
+}
+
+/** Grams of a weight line; legacy lines stored whole kilograms in qty. */
+export function gramsOf(line: Pick<CartLine, "qty" | "grams">): number {
+  return clampGrams(line.grams ?? line.qty * 1000);
+}
+
+/**
+ * Cost of `grams` of a product priced per kg/l: cheapest usable single-unit price
+ * (promo/loyalty with the user's card, else regular) x grams / 1000, rounded to a cent.
+ * Multibuy deals do not apply to weighed goods.
+ */
+export function priceWeight(
+  prices: PriceCondition[],
+  regularCents: number | null,
+  grams: number,
+  chain: ChainId,
+  cards: CartState["cards"],
+): LinePrice {
+  const avail = prices.filter((c) => usable(c, chain, cards) && c.min_qty <= 1);
+  const cardOnly = prices.some((c) => c.kind !== "regular" && !usable(c, chain, cards));
+  let unit: number | null = regularCents;
+  let cond: PriceCondition | null = null;
+  for (const c of avail) {
+    if (unit === null || c.total_cents < unit) {
+      unit = c.total_cents;
+      cond = c;
+    }
+  }
+  if (unit === null) return { totalCents: null, condition: null, approximate: false, addForDeal: null, cardOnly };
+  return {
+    totalCents: Math.round((unit * clampGrams(grams)) / 1000),
+    condition: cond,
+    approximate: false,
+    addForDeal: null,
+    cardOnly,
+  };
+}
+
+/** Cost of a cart line from a price list (pieces or weight). */
+export function priceOfLine(
+  line: Pick<CartLine, "saleUnit" | "qty" | "grams" | "chain">,
+  prices: PriceCondition[],
+  regularCents: number | null,
+  cards: CartState["cards"],
+): LinePrice {
+  return isWeightLine(line)
+    ? priceWeight(prices, regularCents, gramsOf(line), line.chain, cards)
+    : priceLine(prices, regularCents, line.qty, line.chain, cards);
 }
 
 /** Cost of `qty` units from a price list, using only conditions this user can get. */
@@ -224,9 +294,9 @@ function snapshotOf(offer: Offer): CartSnapshot {
 }
 
 /** Compare the user-relevant cost of one unit-set, not raw fields (avoids noise). */
-function samePrices(a: CartSnapshot, offer: Offer, qty: number, chain: ChainId, cards: CartState["cards"]): boolean {
-  const before = priceLine(a.prices, a.regular_cents, qty, chain, cards).totalCents;
-  const now = priceLine(offer.prices, offer.regular_cents, qty, chain, cards).totalCents;
+function samePrices(a: CartSnapshot, offer: Offer, line: CartLine, cards: CartState["cards"]): boolean {
+  const before = priceOfLine(line, a.prices, a.regular_cents, cards).totalCents;
+  const now = priceOfLine(line, offer.prices, offer.regular_cents, cards).totalCents;
   return before === now;
 }
 
@@ -244,7 +314,7 @@ export function reconcile(state: CartState, catalog: Catalog | null, today: stri
   const reconciled: ReconciledLine[] = state.lines.map((line) => {
     const cards = state.cards;
     if (!catalog) {
-      const price = priceLine(line.snapshot.prices, line.snapshot.regular_cents, line.qty, line.chain, cards);
+      const price = priceOfLine(line, line.snapshot.prices, line.snapshot.regular_cents, cards);
       const ended = line.snapshot.valid_to !== null && line.snapshot.valid_to < today;
       return {
         line,
@@ -269,7 +339,7 @@ export function reconcile(state: CartState, catalog: Catalog | null, today: stri
         const sb = status(b, today) === "active" ? 0 : 1;
         return sa - sb || (a.valid_from ?? "").localeCompare(b.valid_from ?? "");
       });
-      const price = priceLine(line.snapshot.prices, line.snapshot.regular_cents, line.qty, line.chain, cards);
+      const price = priceOfLine(line, line.snapshot.prices, line.snapshot.regular_cents, cards);
       return {
         line,
         status: "ended",
@@ -281,10 +351,10 @@ export function reconcile(state: CartState, catalog: Catalog | null, today: stri
         counted: false,
       };
     }
-    const price = priceLine(offer.prices, offer.regular_cents, line.qty, line.chain, cards);
-    const changed = !samePrices(line.snapshot, offer, line.qty, line.chain, cards);
+    const price = priceOfLine(line, offer.prices, offer.regular_cents, cards);
+    const changed = !samePrices(line.snapshot, offer, line, cards);
     const previousTotalCents = changed
-      ? priceLine(line.snapshot.prices, line.snapshot.regular_cents, line.qty, line.chain, cards).totalCents
+      ? priceOfLine(line, line.snapshot.prices, line.snapshot.regular_cents, cards).totalCents
       : null;
     return {
       line,
@@ -328,9 +398,19 @@ function clampQty(q: number): number {
   return Math.min(MAX_QTY, Math.max(1, Math.floor(q)));
 }
 
-export function addOffer(state: CartState, offer: Offer, now: Date = new Date(), qty = 1): CartState {
+/**
+ * Add an offer. Pieces: +qty. Weight (sale_unit kg|l): +grams (default 1000 = 1 kg); `qty` is
+ * ignored for weight lines, which always have qty 1.
+ */
+export function addOffer(state: CartState, offer: Offer, now: Date = new Date(), qty = 1, grams?: number): CartState {
+  const saleUnit: SaleUnit = offer.sale_unit === "kg" || offer.sale_unit === "l" ? offer.sale_unit : "piece";
+  const weight = saleUnit !== "piece";
   const existing = state.lines.find((l) => l.offerId === offer.id);
-  if (existing) return setQty(state, offer.id, existing.qty + qty);
+  if (existing) {
+    return weight
+      ? setGrams(state, offer.id, gramsOf(existing) + (grams ?? 1000))
+      : setQty(state, offer.id, existing.qty + qty);
+  }
   const line: CartLine = {
     offerId: offer.id,
     chain: offer.chain,
@@ -338,12 +418,23 @@ export function addOffer(state: CartState, offer: Offer, now: Date = new Date(),
     name: offer.name,
     imageUrl: offer.image_url,
     unitText: offer.unit_text,
+    saleUnit,
     category: offer.category,
-    qty: clampQty(qty),
+    qty: weight ? 1 : clampQty(qty),
+    ...(weight ? { grams: clampGrams(grams ?? 1000) } : {}),
     addedAt: now.toISOString(),
     snapshot: snapshotOf(offer),
   };
   return { ...state, lines: [...state.lines, line] };
+}
+
+/** Set the weight of a weight line (clamped to WEIGHT_MIN..WEIGHT_MAX); below the minimum removes it. */
+export function setGrams(state: CartState, offerId: string, grams: number): CartState {
+  if (grams < WEIGHT_MIN) return removeLine(state, offerId);
+  return {
+    ...state,
+    lines: state.lines.map((l) => (l.offerId === offerId && isWeightLine(l) ? { ...l, qty: 1, grams: clampGrams(grams) } : l)),
+  };
 }
 
 export function setQty(state: CartState, offerId: string, qty: number): CartState {
@@ -379,7 +470,7 @@ export function acceptPrice(state: CartState, offer: Offer): CartState {
 export function replaceLine(state: CartState, oldOfferId: string, offer: Offer, now: Date = new Date()): CartState {
   const old = state.lines.find((l) => l.offerId === oldOfferId);
   if (!old) return state;
-  return addOffer(removeLine(state, oldOfferId), offer, now, old.qty);
+  return addOffer(removeLine(state, oldOfferId), offer, now, old.qty, isWeightLine(old) ? gramsOf(old) : undefined);
 }
 
 export function cartCount(state: CartState): number {
@@ -447,8 +538,9 @@ function parseLine(raw: unknown): CartLine | null {
     name: l.name,
     imageUrl: l.imageUrl as string | null,
     unitText: l.unitText as string | null,
+    saleUnit: l.saleUnit === "kg" || l.saleUnit === "l" ? l.saleUnit : "piece",
     category: l.category,
-    qty: clampQty(l.qty),
+    ...weightFields(l),
     addedAt: l.addedAt,
     snapshot: {
       prices,
@@ -459,7 +551,16 @@ function parseLine(raw: unknown): CartLine | null {
   };
 }
 
-/** Parse untrusted stored JSON: drops malformed lines, merges duplicate offerIds (sum qty). */
+/** qty/grams of a stored line: weight lines get integer grams (legacy: whole kg in qty). */
+function weightFields(l: Record<string, unknown>): { qty: number; grams?: number } {
+  const weight = l.saleUnit === "kg" || l.saleUnit === "l";
+  const qty = clampQty(l.qty as number);
+  if (!weight) return { qty };
+  const g = typeof l.grams === "number" && Number.isFinite(l.grams) ? l.grams : qty * 1000;
+  return { qty: 1, grams: clampGrams(g) };
+}
+
+/** Parse untrusted stored JSON: drops malformed lines, merges duplicate offerIds (sum qty / grams). */
 export function parseCart(raw: unknown): CartState {
   if (!raw || typeof raw !== "object") return EMPTY_CART;
   const r = raw as Record<string, unknown>;
@@ -469,7 +570,14 @@ export function parseCart(raw: unknown): CartState {
     const line = parseLine(item);
     if (!line) continue;
     const prev = byId.get(line.offerId);
-    byId.set(line.offerId, prev ? { ...prev, qty: clampQty(prev.qty + line.qty) } : line);
+    byId.set(
+      line.offerId,
+      !prev
+        ? line
+        : isWeightLine(prev)
+          ? { ...prev, qty: 1, grams: clampGrams(gramsOf(prev) + gramsOf(line)) }
+          : { ...prev, qty: clampQty(prev.qty + line.qty) },
+    );
   }
   const cards: CartState["cards"] = {};
   if (r.cards && typeof r.cards === "object") {

@@ -36,3 +36,9 @@
 .compact .qty {
   min-width: 24px;
 }
+
+.weight,
+.compact .weight {
+  min-width: 64px;
+  white-space: nowrap;
+}

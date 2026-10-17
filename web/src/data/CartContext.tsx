@@ -6,6 +6,9 @@ import {
   clearCart,
   clearChain as clearChainFn,
   inCartQty,
+  gramsOf,
+  isWeightLine,
+  setGrams as setGramsFn,
   reconcile,
   removeLine,
   replaceLine,
@@ -64,6 +67,10 @@ export interface CartApi {
   qtyOf: (offerId: string) => number;
   add: (offer: Offer) => void;
   setQty: (offerId: string, qty: number) => void;
+  /** Weight of a weight line in grams (0 when the offer is not in the cart or is not a weight line). */
+  gramsOfOffer: (offerId: string) => number;
+  /** Sets the grams of a weight line; below the minimum removes the line. */
+  setGrams: (offerId: string, grams: number) => void;
   remove: (offerId: string) => void;
   clear: () => void;
   clearChain: (chain: ChainId) => void;
@@ -183,6 +190,10 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
     (offerId: string, qty: number) => actOn(shownId, (s) => setQtyFn(s, offerId, qty)),
     [actOn, shownId],
   );
+  const setGrams = useCallback(
+    (offerId: string, grams: number) => actOn(shownId, (s) => setGramsFn(s, offerId, grams)),
+    [actOn, shownId],
+  );
   const remove = useCallback(
     (offerId: string) => {
       const line = latest.current.carts.find((c) => c.id === shownId)?.cart.lines.find((l) => l.offerId === offerId);
@@ -276,8 +287,13 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
       summary,
       count: cartCount(cartState),
       qtyOf: (id) => inCartQty(cartState, id),
+      gramsOfOffer: (id) => {
+        const l = cartState.lines.find((x) => x.offerId === id);
+        return l && isWeightLine(l) ? gramsOf(l) : 0;
+      },
       add,
       setQty,
+      setGrams,
       remove,
       clear,
       clearChain,
@@ -297,6 +313,7 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
       summary,
       add,
       setQty,
+      setGrams,
       remove,
       clear,
       clearChain,

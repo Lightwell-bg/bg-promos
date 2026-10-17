@@ -229,3 +229,20 @@ def test_fetch_first_url_error_and_block_propagate():
 def test_rows_without_header_is_format_error():
     with pytest.raises(SourceFormatError):
         parse_brochure(_page(None, ["Тестов продукт 1 кг"]))
+
+
+def test_glued_unit_is_split_and_sold_by_piece():
+    from bg_promos.web.units import sale_unit
+
+    html = _page(
+        HEADER, ["Fantasy Foods Панирани топени сиренца От деликатесната витрина За 1 кг1 бр."]
+    )
+    [o] = parse_brochure(html)
+    assert "За 1 кг 1 бр." in o.name
+    assert o.unit_text == "1 бр."
+    assert sale_unit(o.unit_text) == "piece"
+    from bg_promos.web.pricing import derive
+
+    prices = [{"kind": p.kind, "program": p.program, "min_qty": p.min_qty, "price_cents": p.price_cents,
+               "discount_pct": p.discount_pct, "condition_text": p.condition_text} for p in o.prices]
+    assert derive(prices, o.unit_text, o.name)["unit_price"] is None

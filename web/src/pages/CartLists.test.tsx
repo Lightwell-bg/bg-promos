@@ -138,13 +138,11 @@ describe("sharing and managing lists", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
     // the panel is visible without any share/clipboard API call
     expect(shared).toBeNull();
-    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
-    const tg = screen.getByRole("link", { name: "Изпрати в Telegram" }) as HTMLAnchorElement;
-    const tgUrl = new URL(tg.href);
-    expect(tgUrl.origin + tgUrl.pathname).toBe("https://t.me/share/url");
-    expect(tgUrl.searchParams.get("url")).toBe(input.value);
-    expect(tgUrl.searchParams.get("text")).toBe("Моята количка");
-    expect(screen.getByRole("button", { name: "Копирай връзката" })).toBeInTheDocument();
+    const input = (await screen.findByRole("textbox", { name: "За браузър" })) as HTMLInputElement;
+    // no bot configured: only the browser block, no Telegram block or share link
+    expect(screen.queryByRole("textbox", { name: "Telegram" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Изпрати в Telegram" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Копирай" })).toBeInTheDocument();
     const url = new URL(input.value);
     expect(url.pathname).toBe("/bg/cart/import");
     expect(decodeShare(shareFromHash(url.hash)).sort((x, y) => x.offerId.localeCompare(y.offerId))).toEqual(
@@ -155,10 +153,12 @@ describe("sharing and managing lists", () => {
     );
   });
 
-  it("with a configured bot the panel link is a t.me Mini App link, used by Telegram share too", async () => {
+  it("with a configured bot there are two blocks: a t.me Mini App link (used by Telegram share) and a browser link", async () => {
     await renderWithCart(<Cart />, { cart: cartOf([A, 2], [B, 1]), config: { telegram_bot: "promoseubot" } });
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
-    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    const web = (await screen.findByRole("textbox", { name: "За браузър" })) as HTMLInputElement;
+    expect(new URL(web.value).pathname).toBe("/bg/cart/import");
+    const input = screen.getByRole("textbox", { name: "Telegram" }) as HTMLInputElement;
     expect(input.value).toMatch(/^https:\/\/t\.me\/promoseubot\?startapp=c1_[0-9a-f]{12}/);
     expect(input.value).toBe(`https://t.me/promoseubot?startapp=${encodeStartParam(cartOf([A, 2], [B, 1]))}`);
     const tg = screen.getByRole("link", { name: "Изпрати в Telegram" }) as HTMLAnchorElement;
@@ -174,7 +174,8 @@ describe("sharing and managing lists", () => {
     const lines = Array.from({ length: 40 }, (_, i) => ({ ...first, offerId: i.toString(16).padStart(12, "0") }));
     await renderWithCart(<Cart />, { cart: { ...EMPTY_CART, lines }, config: { telegram_bot: "promoseubot" } });
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
-    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    const input = (await screen.findByRole("textbox", { name: "За браузър" })) as HTMLInputElement;
+    expect(screen.queryByRole("textbox", { name: "Telegram" })).toBeNull();
     expect(new URL(input.value).pathname).toBe("/bg/cart/import");
     expect(screen.getByText("Списъкът е дълъг — връзката ще се отвори в браузъра")).toBeInTheDocument();
   });
@@ -182,9 +183,23 @@ describe("sharing and managing lists", () => {
   it("without a configured bot the web link and the note are shown", async () => {
     await renderWithCart(<Cart />, { cart: cartOf([A, 2]), config: { telegram_bot: null } });
     await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
-    const input = (await screen.findByRole("textbox", { name: "Връзка към количката" })) as HTMLInputElement;
+    const input = (await screen.findByRole("textbox", { name: "За браузър" })) as HTMLInputElement;
     expect(new URL(input.value).pathname).toBe("/bg/cart/import");
     expect(screen.getByText("Списъкът е дълъг — връзката ще се отвори в браузъра")).toBeInTheDocument();
+  });
+
+  it("a failed copy shows the error text in its block and leaves the link in place", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("no")) }, configurable: true });
+    Object.defineProperty(document, "execCommand", { value: vi.fn(() => false), configurable: true });
+    await renderWithCart(<Cart />, { cart: cartOf([A, 2]), config: { telegram_bot: "promoseubot" } });
+    await userEvent.click(await screen.findByRole("button", { name: "Сподели" }));
+    const web = within(await screen.findByRole("group", { name: "За браузър" }));
+    await userEvent.click(web.getByRole("button", { name: "Копирай" }));
+    expect(await web.findByText("Не успяхме да споделим количката")).toBeInTheDocument();
+    expect(web.getByRole("textbox")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Telegram" })).queryByRole("status")).toBeNull();
+    Reflect.deleteProperty(navigator, "clipboard");
+    Reflect.deleteProperty(document, "execCommand");
   });
 
   it("no share button for an empty list", async () => {

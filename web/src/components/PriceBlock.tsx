@@ -1,5 +1,5 @@
 import type { CardMode } from "../domain/filters";
-import { formatEUR, priceModel } from "../domain/price";
+import { formatEUR, priceModel, saleUnitOf, unitKey } from "../domain/price";
 import type { Offer } from "../domain/types";
 import { useT } from "../i18n/LangContext";
 import styles from "./PriceBlock.module.css";
@@ -20,6 +20,7 @@ export function PriceBlock({ offer, variant = "compact", card = "all" }: Props) 
     return <p className={styles.muted}>{t("price.none")}</p>;
   }
   const multibuy = m.qty > 1;
+  const unit = t(unitKey(saleUnitOf(offer)));
   return (
     <div className={`${styles.root} ${variant === "full" ? styles.full : ""}`}>
       {/* Hierarchy: big price + red discount badge, then condition chips and the struck price. */}
@@ -48,7 +49,7 @@ export function PriceBlock({ offer, variant = "compact", card = "all" }: Props) 
 
       {multibuy && m.perItemCents != null && (
         <p className={styles.perItem}>
-          {t("price.perItemBuy", { amount: formatEUR(m.perItemCents), n: m.qty })}
+          {t("price.perItemBuy", { amount: formatEUR(m.perItemCents), unit, n: m.qty })}
         </p>
       )}
 
@@ -59,8 +60,9 @@ export function PriceBlock({ offer, variant = "compact", card = "all" }: Props) 
                 amount: formatEUR(m.noCard.cents),
                 n: m.noCard.qty,
                 each: formatEUR(m.noCard.perItemCents),
+                unit,
               })
-            : t("price.noCard", { amount: formatEUR(m.noCard.cents) })}
+            : t("price.noCard", { amount: formatEUR(m.noCard.cents), unit })}
         </p>
       )}
       {m.noCard?.state === "unknown" && <p className={styles.noCardUnknown}>{t("price.noCardUnknown")}</p>}
@@ -72,7 +74,7 @@ export function PriceBlock({ offer, variant = "compact", card = "all" }: Props) 
       )}
 
       {variant === "full" && m.savingsPerItemCents != null && m.savingsPerItemCents > 0 && (
-        <p className={styles.savings}>{t("offer.savings", { amount: formatEUR(m.savingsPerItemCents) })}</p>
+        <p className={styles.savings}>{t("offer.savings", { amount: formatEUR(m.savingsPerItemCents), unit })}</p>
       )}
     </div>
   );

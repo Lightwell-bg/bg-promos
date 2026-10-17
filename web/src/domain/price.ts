@@ -1,5 +1,16 @@
 import { effectiveSavings, effectiveCondition, type CardMode } from "./filters";
-import type { Offer, PriceCondition, Program, UnitPrice } from "./types";
+import type { Offer, PriceCondition, Program, SaleUnit, UnitPrice } from "./types";
+
+/** Sale unit of an offer or cart line; anything missing/unknown (old cached data) is a piece. */
+export function saleUnitOf(x: { sale_unit?: unknown } | null | undefined): SaleUnit {
+  const v = x?.sale_unit;
+  return v === "kg" || v === "l" ? v : "piece";
+}
+
+/** i18n key of the short unit label: "бр." / "кг" / "л". */
+export function unitKey(u: SaleUnit): string {
+  return `unit.${u}`;
+}
 
 const NBSP = " ";
 

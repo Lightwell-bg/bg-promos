@@ -22,11 +22,11 @@ describe("detectLang", () => {
 describe("translate", () => {
   it("interpolates params", () => {
     expect(translate("bg", "validity.until", { date: "21.10" })).toBe("до 21.10");
-    expect(translate("ru", "price.noCardQty", { amount: "3,78 €", n: 2, each: "1,89 €" })).toBe(
+    expect(translate("ru", "price.noCardQty", { amount: "3,78 €", n: 2, each: "1,89 €", unit: "шт." })).toBe(
       "Без карты: 3,78 € за 2 шт. (1,89 €/шт.)",
     );
-    expect(translate("ru", "price.noCard", { amount: "1,89 €" })).toBe("Без карты: 1,89 €/шт.");
-    expect(translate("bg", "price.noCard", { amount: "1,89 €" })).toBe("Без карта: 1,89 €/бр.");
+    expect(translate("ru", "price.noCard", { amount: "1,89 €", unit: "шт." })).toBe("Без карты: 1,89 €/шт.");
+    expect(translate("bg", "price.noCard", { amount: "1,89 €", unit: "кг" })).toBe("Без карта: 1,89 €/кг");
   });
   it("returns the key for unknown messages", () => {
     expect(translate("bg", "no.such.key")).toBe("no.such.key");

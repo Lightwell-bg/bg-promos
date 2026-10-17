@@ -188,8 +188,10 @@ def _keyword_category(name: str, allowed: set[str] | None = None) -> str | None:
         if allowed is not None and cat not in allowed:
             continue
         for stem in stems:
-            if stem.startswith("="):  # whole word
-                pattern = r"(?<![а-яa-z])" + re.escape(stem[1:]) + r"(?![а-яa-z])"
+            # Latin stems are brand names: whole word only ("fanta" must not match "Fantasy Foods").
+            if stem.startswith("=") or re.fullmatch(r"[a-z0-9&' .-]+", stem):
+                word = stem[1:] if stem.startswith("=") else stem
+                pattern = r"(?<![а-яa-z])" + re.escape(word.strip()) + r"(?![а-яa-z])"
             else:  # word start
                 pattern = r"(?<![а-яa-z])" + re.escape(stem)
             if re.search(pattern, text):

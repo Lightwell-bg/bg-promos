@@ -67,6 +67,8 @@ against the current Sofia date, because a cached copy can be used offline.
 | regular_cents | int \| null | regular price of ONE item |
 | savings_per_item_cents | int \| null | regular − best per-item price; null when regular is unknown |
 | unit_price | UnitPrice \| null | per kg / l of `best`, only from reliable data |
+| sale_unit | `"kg" \| "l" \| "piece"` | how the price is quoted, from `unit_text` only: `kg`/`l` when the chain states the price is per kg/l ("За 1 кг", "за kg", "по 1 л"); pre-packed "1 кг"/"1 л" and everything else is `piece`. Clients treat a missing value as `piece` |
+| alt_ids | string[] | ids of equivalent offers of the same chain (exactly equal name, description, pack size and brand, overlapping validity), e.g. Lidl listing the same goods twice under different product ids; `[]` when none. Such offers share the union of their `prices` (one regular price) and the re-derived `best` / `no_card` / `regular_cents` / `savings_per_item_cents` / `unit_price` |
 
 ### PriceCondition
 | field | type | notes |
