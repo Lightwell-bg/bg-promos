@@ -1,0 +1,758 @@
+{
+ "type": "search",
+ "locale": "bg_BG",
+ "assortment": "BG",
+ "resultType": "search",
+ "numFound": 8,
+ "offset": 0,
+ "fetchsize": 60,
+ "items": [
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064409",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "canonicalPath": "/p/byl-zemel/p10064409",
+     "canonicalUrl": "/p/byl-zemel/p10064409",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064409",
+     "flashSales": false,
+     "fullTitle": "Бял земел",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "2002"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/ZHXKLkPebvfwlV3rtpoHBgKqH5J7SM95wkxYo1PZTEw/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS8yQTI1NDk0NEJBMjY4MDBGQjJBNEI1RkJ/BRTM4OEEwRjMwODEyM0QxMDRFMjIxNjJCODc1OTI3NTdCMkY4NzE1LnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064409,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>Със сусам</li> </ul>",
+      "fullTitle": "Бял земел",
+      "moreDetails": "Допълнителна информация",
+      "title": "Бял земел",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Хляб и тестени изделия/Хлебчета и багети",
+      "wonCategoryPrimaryPath": "0/17/1740/174011"
+     },
+     "lidlPlus": [],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "discount": {
+       "absoluteDiscount": 0.03,
+       "deletedPrice": 0.11,
+       "discountHasStar": false,
+       "discountText": "-27%",
+       "fromRecommendedPrice": false,
+       "hideBargainHint": false,
+       "bargainHintEnabled": false,
+       "bargainHintText": "BargainHint_Text",
+       "percentageDiscount": 27,
+       "showDiscount": true,
+       "showFrom": false,
+       "showPercentage": true,
+       "showUpTo": false
+      },
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "oldPrice": 0.11,
+      "packaging": {
+       "text": "60 g/бр."
+      },
+      "price": 0.08,
+      "priceTheme": "white_red",
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064409,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1794175199,
+     "title": "Бял земел",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064410",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "brand": {
+      "name": "MILKA",
+      "url": "/q/search?q=milka",
+      "showBrand": true
+     },
+     "canonicalPath": "/p/milka-donat/p10064410",
+     "canonicalUrl": "/p/milka-donat/p10064410",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064410",
+     "flashSales": false,
+     "fullTitle": "MILKA Донат",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "143246"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/by8iegloJ98nPCRU8osCCPqXI8Nrb6PKhj04jiePFS8/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS9CNDcwRTUxMUI2NkY1NUEzRjBBMzhDRUM/zRDQ1NDMwRDZFMEJERjZBQ0FDMTg2N0YzQUUxRjk0NTkyNzQ1MkZBLnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064410,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "fullTitle": "MILKA Донат",
+      "moreDetails": "Допълнителна информация",
+      "title": "Донат",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Хляб и тестени изделия/Сладки закуски",
+      "wonCategoryPrimaryPath": "0/17/1740/174012"
+     },
+     "lidlPlus": [],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "discount": {
+       "absoluteDiscount": 0.14,
+       "deletedPrice": 0.92,
+       "discountHasStar": false,
+       "discountText": "Акция",
+       "fromRecommendedPrice": false,
+       "hideBargainHint": false,
+       "bargainHintEnabled": false,
+       "bargainHintText": "BargainHint_Text",
+       "percentageDiscount": 15,
+       "showDiscount": true,
+       "showFrom": false,
+       "showPercentage": true,
+       "showUpTo": false
+      },
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "oldPrice": 0.92,
+      "packaging": {
+       "text": "56 g/бр."
+      },
+      "price": 0.78,
+      "priceTheme": "white_red",
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064410,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1794175199,
+     "title": "Донат",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064411",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "canonicalPath": "/p/vita-banita/p10064411",
+     "canonicalUrl": "/p/vita-banita/p10064411",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064411",
+     "flashSales": false,
+     "fullTitle": "Вита баница",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "7209068"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/4cecGvtk1H1diwnjzGZeDUSWCroX4kNdrKg1GdljmBY/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS9EMDBEMjA4NDNGMzg1REY2Nzg3OTc5QkN/FODRDMTk2NEQwNUIzRkI3NTNCOTVFNjAzODI5MkVDNDYzNEEwMEY5LnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064411,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>Със сирене</li> </ul>",
+      "fullTitle": "Вита баница",
+      "moreDetails": "Допълнителна информация",
+      "title": "Вита баница",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Хляб и тестени изделия/Солени закуски",
+      "wonCategoryPrimaryPath": "0/17/1740/174013"
+     },
+     "lidlPlus": [],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "discount": {
+       "absoluteDiscount": 0.36,
+       "deletedPrice": 2.55,
+       "discountHasStar": false,
+       "discountText": "Акция",
+       "fromRecommendedPrice": false,
+       "hideBargainHint": false,
+       "bargainHintEnabled": false,
+       "bargainHintText": "BargainHint_Text",
+       "percentageDiscount": 14,
+       "showDiscount": true,
+       "showFrom": false,
+       "showPercentage": true,
+       "showUpTo": false
+      },
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "oldPrice": 2.55,
+      "packaging": {
+       "text": "460 g/бр."
+      },
+      "price": 2.19,
+      "priceTheme": "white_red",
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064411,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1794175199,
+     "title": "Вита баница",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064358",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "brand": {
+      "name": "MCENNEDY",
+      "url": "/q/search?q=mcennedy",
+      "showBrand": true
+     },
+     "canonicalPath": "/p/mcennedy-bavno-gotveno-puesko-meso/p10064358",
+     "canonicalUrl": "/p/mcennedy-bavno-gotveno-puesko-meso/p10064358",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064358",
+     "flashSales": false,
+     "fullTitle": "MCENNEDY Бавно готвено пуешко месо",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "126504"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/t7nw9hMp72HZxDL_hWrES2QFq-hVXe5DkDnbHFCl6lY/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS9DNjdDMkU3RkExNDdFODQ5MUE5RjVEM0I/yNjVCNDFFREQ3REFBNjU0NkVDRjdGMkY0NTg5QkI5MUI1NEI1QzAyLnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064358,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "fullTitle": "MCENNEDY Бавно готвено пуешко месо",
+      "moreDetails": "Допълнителна информация",
+      "title": "Бавно готвено пуешко месо",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Охладени продукти/Готови ястия, съхранявани в хладилник",
+      "wonCategoryPrimaryPath": "0/17/1711/171110"
+     },
+     "lidlPlus": [],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "oldPrice": 0.0,
+      "packaging": {
+       "text": "500 g/опаковка"
+      },
+      "price": 5.99,
+      "priceTheme": "white_red",
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064358,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1792357199,
+     "title": "Бавно готвено пуешко месо",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064359",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "brand": {
+      "name": "MCENNEDY",
+      "url": "/q/search?q=mcennedy",
+      "showBrand": true
+     },
+     "canonicalPath": "/p/mcennedy-dvoen-burger/p10064359",
+     "canonicalUrl": "/p/mcennedy-dvoen-burger/p10064359",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064359",
+     "flashSales": false,
+     "fullTitle": "MCENNEDY Двоен бургер",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "130913"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/LjPgt5UWb1lwSHTFWAipfNgJxG9TiSk8vj-NDL_TVFE/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS83NTJEOUYxMDVGRDZDNkVEMjk2RDg2RDF/BREJCRDREMzdGMDJDMTdFREQ5RTBFNDhBOURCRTgxMTYwNzk4RDk2LnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064359,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>Различни видове</li> </ul>",
+      "fullTitle": "MCENNEDY Двоен бургер",
+      "moreDetails": "Допълнителна информация",
+      "title": "Двоен бургер",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Охладени продукти/Готови ястия, съхранявани в хладилник",
+      "wonCategoryPrimaryPath": "0/17/1711/171110"
+     },
+     "lidlPlus": [],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "oldPrice": 0.0,
+      "packaging": {
+       "text": "300 g/опаковка"
+      },
+      "price": 2.89,
+      "priceTheme": "white_red",
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064359,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1792357199,
+     "title": "Двоен бургер",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064390",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "brand": {
+      "name": "PILOS",
+      "url": "/q/search?q=pilos",
+      "showBrand": true
+     },
+     "canonicalPath": "/p/pilos-topeno-sirene/p10064390",
+     "canonicalUrl": "/p/pilos-topeno-sirene/p10064390",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064390",
+     "flashSales": false,
+     "fullTitle": "PILOS Топено сирене",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "20465834"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/BKKZIjH9Q10Wwnr5P0YdYorGWN-ifvARbzcWQ0xZqRA/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS85MzA1OTdCRjkxODI0NDc1OTBEOTE0MjE/2MTIwQkY2MDE0QTQ1OERFMzExMzU4NEI4MTdFNjMwRjkyNzY1QzUxLnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064390,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>Различни видове</li> </ul>",
+      "fullTitle": "PILOS Топено сирене",
+      "moreDetails": "Допълнителна информация",
+      "title": "Топено сирене",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Сирена, млечни продукти и яйца/Сирене и кашкавал",
+      "wonCategoryPrimaryPath": "0/17/1739/173912"
+     },
+     "lidlPlus": [
+      {
+       "price": {
+        "basePrice": {
+         "prefix": false
+        },
+        "discount": {
+         "deletedPrice": 1.02,
+         "discountHasStar": false,
+         "discountText": "50% по-евтино",
+         "fromNormalPriceForLidlPlus": false,
+         "fromRecommendedPrice": false,
+         "hideBargainHint": false,
+         "bargainHintEnabled": false,
+         "bargainHintText": "BargainHint_Text",
+         "showDiscount": true,
+         "showFrom": false,
+         "showPercentage": true,
+         "showUpTo": false
+        },
+        "displayedCurrency": "€",
+        "hasStar": true,
+        "hasVat": false,
+        "oldPrice": 1.02,
+        "packaging": {
+         "text": "100 g/опаковка"
+        },
+        "price": 0.51,
+        "priceTheme": "white_yellow",
+        "specialTaxes": [],
+        "superscript": ""
+       },
+       "lidlPlusText": "С Lidl Plus",
+       "highlightText": "50% по-евтино"
+      }
+     ],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064390,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1792357199,
+     "title": "Топено сирене",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064391",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "brand": {
+      "name": "MAX & MILA’S WORLD",
+      "url": "/q/search?q=max+%26+mila%E2%80%99s+world",
+      "showBrand": true
+     },
+     "canonicalPath": "/p/max-mila-s-world-krana-za-kuceta/p10064391",
+     "canonicalUrl": "/p/max-mila-s-world-krana-za-kuceta/p10064391",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064391",
+     "flashSales": false,
+     "fullTitle": "MAX & MILA’S WORLD Храна за кучета",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "1016675"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/Coadqr5iN3V2t9_xzZ4MIdWcid5AiEEJNHhZYTzRCQo/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvaW50L0VGRkM1OEUxQkQxQUFEOURGODM3NDlCQU/JEODA0NTI0MTU5MzAwRERBRUU2QjNGQUJCNDhDNzUzNTEwNzNDNTgucG5n.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064391,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>Хапки в сос</li> <li>Различни видове</li> </ul>",
+      "fullTitle": "MAX & MILA’S WORLD Храна за кучета",
+      "moreDetails": "Допълнителна информация",
+      "title": "Храна за кучета",
+      "wonCategoryPrimary": "Светове на нуждата/Стоки за домашни любимци/Артикули за кучета/Храна за кучета/Суха храна",
+      "wonCategoryPrimaryPath": "0/19/1911/191111/19111112"
+     },
+     "lidlPlus": [
+      {
+       "price": {
+        "basePrice": {
+         "prefix": false
+        },
+        "discount": {
+         "deletedPrice": 1.99,
+         "discountHasStar": false,
+         "discountText": "35% по-евтино",
+         "fromNormalPriceForLidlPlus": false,
+         "fromRecommendedPrice": false,
+         "hideBargainHint": false,
+         "bargainHintEnabled": false,
+         "bargainHintText": "BargainHint_Text",
+         "showDiscount": true,
+         "showFrom": false,
+         "showPercentage": true,
+         "showUpTo": false
+        },
+        "displayedCurrency": "€",
+        "hasStar": true,
+        "hasVat": false,
+        "oldPrice": 1.99,
+        "packaging": {
+         "text": "1.24 kg/опаковка"
+        },
+        "price": 1.29,
+        "priceTheme": "white_yellow",
+        "specialTaxes": [],
+        "superscript": ""
+       },
+       "lidlPlusText": "С Lidl Plus",
+       "highlightText": "35% по-евтино"
+      }
+     ],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064391,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1792357199,
+     "title": "Храна за кучета ",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  },
+  {
+   "resultClass": "product",
+   "type": "product",
+   "code": "10064392",
+   "gridbox": {
+    "data": {
+     "ageRestriction": false,
+     "hasColors": false,
+     "awards": [],
+     "canonicalPath": "/p/bageta/p10064392",
+     "canonicalUrl": "/p/bageta/p10064392",
+     "category": "Хранителни",
+     "dealOfDay": {
+      "active": false
+     },
+     "designTheme": "default",
+     "displayFreeDelivery": false,
+     "energyLabels": [],
+     "erpNumber": "10064392",
+     "flashSales": false,
+     "fullTitle": "Багета",
+     "guaranteeLabels": [],
+     "havingPrice": true,
+     "havingThreesixty": false,
+     "havingVideos": false,
+     "highlightedSeals": 0,
+     "ians": [
+      "121022"
+     ],
+     "image": "https://imgproxy-retcat.assets.schwarz/3uzWzb68FdkwqlON2eABen0aM4mrcnmJiaKIx8hJ1CE/sm:0/exar:1:ce/w:427/h:320/cz/M6Ly9wcm9kLWNhd/GFsb2ctbWVkaWEvYmcvMS9FRDRBRDFENjg4ODFCOEQzNEI0NzVGMzZ/BQ0RGNDA3RjQwNDQyNTgxODlGNDFCOTI2QjkxQjg3OEY5QzkwQkU0LnBuZw.png",
+     "isLidlGiftCard": false,
+     "isUsedProduct": false,
+     "itemId": 10064392,
+     "keyfacts": {
+      "analyticsCategory": "Хранителни",
+      "description": "<ul> <li>С чеснов пълнеж</li> </ul>",
+      "fullTitle": "Багета",
+      "moreDetails": "Допълнителна информация",
+      "title": "Багета",
+      "wonCategoryPrimary": "Светове на нуждата/Храна и близки до нея храни/Хляб и тестени изделия/Хлебчета и багети",
+      "wonCategoryPrimaryPath": "0/17/1740/174011"
+     },
+     "lidlPlus": [
+      {
+       "price": {
+        "basePrice": {
+         "prefix": false
+        },
+        "discount": {
+         "deletedPrice": 0.86,
+         "discountHasStar": false,
+         "discountText": "31% по-евтино",
+         "fromNormalPriceForLidlPlus": false,
+         "fromRecommendedPrice": false,
+         "hideBargainHint": false,
+         "bargainHintEnabled": false,
+         "bargainHintText": "BargainHint_Text",
+         "showDiscount": true,
+         "showFrom": false,
+         "showPercentage": true,
+         "showUpTo": false
+        },
+        "displayedCurrency": "€",
+        "hasStar": true,
+        "hasVat": false,
+        "oldPrice": 0.86,
+        "packaging": {
+         "text": "165 g/бр."
+        },
+        "price": 0.59,
+        "priceTheme": "white_yellow",
+        "specialTaxes": [],
+        "superscript": ""
+       },
+       "lidlPlusText": "С Lidl Plus",
+       "highlightText": "31% по-евтино"
+      }
+     ],
+     "multipack": false,
+     "online": false,
+     "preventSelling": false,
+     "price": {
+      "currencyCode": "EUR",
+      "currencyCodeSecond": "BGN",
+      "currencySymbol": "€",
+      "currencySymbolSecond": "ЛВ.",
+      "displayedCurrency": "€",
+      "displayedCurrencySecond": "ЛВ.",
+      "hasStar": true,
+      "hasVat": false,
+      "specialTaxes": [],
+      "variantsHaveDifferentPrices": false
+     },
+     "productId": 10064392,
+     "productType": "RETAIL",
+     "productOrigin": "progress_event",
+     "storeStartDate": 1791752400,
+     "storeEndDate": 1792357199,
+     "title": "Багета",
+     "timezoneId": "Europe/Sofia"
+    }
+   }
+  }
+ ]
+}

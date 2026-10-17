@@ -1,0 +1,10 @@
+# One-shot collector: run by host cron, no restart policy.
+#   docker compose run --rm collector collect --scheduled
+services:
+  collector:
+    build: .
+    image: bg-promos-collector
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./config.ini:/app/config.ini:ro

@@ -1,0 +1,336 @@
+"""Collection pipeline: lock, schedule check, fetch -> archive -> parse -> validate -> store -> export."""
+
+from __future__ import annotations
+
+import gzip
+import hashlib
+import logging
+import os
+import statistics
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from datetime import date, datetime, time as dtime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from .config import Settings
+from .export import export_all
+from .http import HttpClient
+from .sources.base import RawDocument, Source
+from .sources.billa import BillaSource
+from .sources.kaufland import KauflandSource
+from .sources.lidl import LidlSource
+from .storage import Storage
+
+log = logging.getLogger(__name__)
+
+LOCK_NAME = ".collect.lock"
+EXIT_OK, EXIT_PROBLEM, EXIT_BUSY = 0, 1, 2
+CHAINS = ("lidl", "kaufland", "billa")
+
+
+class LockBusyError(Exception):
+    """Another collection run holds the lock."""
+
+
+def _try_lock(fd: int) -> bool:
+    """Non-blocking exclusive OS lock on the open file; False when someone else holds it."""
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock(fd: int) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextmanager
+def collection_lock(path: Path) -> Iterator[None]:
+    """Exclusive OS lock on ``path`` (flock / msvcrt.locking), released by the OS if the process dies.
+
+    The file itself is kept: a leftover file of a dead process is not a lock. It only
+    holds "pid timestamp" for information.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR)
+    if not _try_lock(fd):
+        os.close(fd)
+        raise LockBusyError(f"lock {path} is held by another process")
+    try:
+        try:
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, f"{os.getpid()} {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n".encode())
+        except OSError:
+            log.debug("cannot write lock info to %s", path)
+        yield
+    finally:
+        _unlock(fd)
+        os.close(fd)
+
+
+def build_sources(settings: Settings) -> dict[str, Source]:
+    """Instantiate enabled chain adapters from the settings."""
+    sources: dict[str, Source] = {}
+    for name in CHAINS:
+        cs = settings.chain(name)
+        if not cs.enabled:
+            continue
+        o = cs.options
+        if name == "lidl":
+            sources[name] = LidlSource(
+                api_url=o.get("api_url", "https://www.lidl.bg/q/api/search"),
+                page_size=int(o.get("page_size", 60)),
+                max_pages=int(o.get("max_pages", 60)),
+                tz=settings.tz,
+            )
+        elif name == "kaufland":
+            sources[name] = KauflandSource(url=o["url"], tz=settings.tz) if "url" in o else KauflandSource(tz=settings.tz)
+        elif name == "billa":
+            urls = [u.strip() for u in o.get("urls", "").split(",") if u.strip()]
+            sources[name] = BillaSource(urls) if urls else BillaSource()
+    return sources
+
+
+def _as_utc(now: datetime | None) -> datetime:
+    if now is None:
+        return datetime.now(timezone.utc)
+    return now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
+
+
+def last_slot_instant(slots: Sequence[dtime], tz: ZoneInfo, now_utc: datetime) -> datetime | None:
+    """Latest slot instant (UTC) that is <= now; looks at today and yesterday in ``tz``."""
+    now_utc = _as_utc(now_utc)
+    today = now_utc.astimezone(tz).date()
+    candidates = []
+    for day in (today - timedelta(days=1), today):
+        for slot in slots:
+            instant = datetime.combine(day, slot, tzinfo=tz).astimezone(timezone.utc)
+            if instant <= now_utc:
+                candidates.append(instant)
+    return max(candidates) if candidates else None
+
+
+def is_due(
+    chain: str,
+    storage: Storage,
+    slots: Sequence[dtime],
+    tz: ZoneInfo,
+    now_utc: datetime,
+    max_retries: int = 3,
+) -> bool:
+    """Due when the latest passed slot has no finished run of the chain, or all runs since it
+    failed (fewer than ``max_retries``) and the latest one was not a 403 block."""
+    slot = last_slot_instant(slots, tz, now_utc)
+    if slot is None:
+        return False
+    since_slot = []
+    for row in storage.recent_runs(chain, max(max_retries, 1) + 20):
+        started = datetime.fromisoformat(row["started_at"])
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if started.astimezone(timezone.utc) >= slot:
+            since_slot.append(row)
+    if not since_slot:
+        return True
+    if any(r["status"] == "ok" for r in since_slot):
+        return False
+    if len(since_slot) >= max_retries:
+        return False
+    return not (since_slot[0]["error"] or "").startswith("HttpBlockedError")  # a block waits for the next slot
+
+
+def _content_hash(docs: Sequence[RawDocument]) -> str:
+    h = hashlib.sha256()
+    for d in docs:
+        h.update(d.content)
+    return h.hexdigest()
+
+
+def _archive(docs: Sequence[RawDocument], raw_dir: Path, chain: str, now_utc: datetime) -> None:
+    folder = raw_dir / chain
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    for d in docs:
+        safe = "".join(c if c.isalnum() or c in "-." else "-" for c in d.name)
+        with gzip.open(folder / f"{stamp}_{safe}.gz", "wb") as fh:
+            fh.write(d.content)
+
+
+def purge_raw(raw_dir: Path, retention_days: int, now_utc: datetime) -> int:
+    """Delete archived raw files older than ``retention_days`` (by the timestamp in the name)."""
+    if not raw_dir.exists():
+        return 0
+    cutoff = now_utc - timedelta(days=retention_days)
+    removed = 0
+    for f in raw_dir.glob("*/*.gz"):
+        try:
+            ts = datetime.strptime(f.name.split("_", 1)[0], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            ts = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+        if ts < cutoff:
+            f.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def _is_new_baseline(storage: Storage, chain: str, count: int, current_run_id: int) -> bool:
+    """True when the last 2 finished runs were both suspicious with counts within +-10% of ``count``."""
+    prev = [r for r in storage.recent_runs(chain, 3) if r["id"] != current_run_id][:2]
+    if len(prev) < 2:
+        return False
+    for r in prev:
+        n = r["offers_count"]
+        if r["status"] != "suspicious" or not n or abs(n - count) > 0.1 * count:
+            return False
+    return True
+
+
+def run_chain(
+    source: Source,
+    storage: Storage,
+    http: HttpClient,
+    settings: Settings,
+    scheduled: bool = False,
+    now: datetime | None = None,
+    accept_suspicious: bool = False,
+) -> str:
+    """Collect one chain. Never raises (except KeyboardInterrupt); returns the run status."""
+    chain = source.chain
+    now_utc = _as_utc(now)
+    run_id = storage.start_run(chain, scheduled)
+    content_hash: str | None = None
+    try:
+        docs = source.fetch(http)
+        content_hash = _content_hash(docs)
+        try:
+            _archive(docs, settings.data_dir / "raw", chain, now_utc)
+        except OSError:
+            log.exception("%s: cannot archive raw documents", chain)
+        offers = source.parse(docs)
+        count = len(offers)
+
+        problem = None
+        ratio_only = False
+        minimum = settings.chain(chain).min_expected_offers
+        if count < minimum:
+            problem = f"only {count} offers, expected at least {minimum}"
+        else:
+            history = storage.recent_ok_counts(chain, settings.history_runs)
+            if history:
+                median = statistics.median(history)
+                if count < settings.min_ratio * median:
+                    ratio_only = True
+                    problem = (
+                        f"{count} offers is below {settings.min_ratio:.0%} of the median "
+                        f"{median:g} of the last {len(history)} good runs"
+                    )
+        if problem and ratio_only and _is_new_baseline(storage, chain, count, run_id):
+            log.warning("%s: accepting new baseline of %s offers (%s)", chain, count, problem)
+            problem = None
+        if problem and accept_suspicious and count > 0:
+            log.warning("%s: --accept-suspicious: saving %s offers despite: %s", chain, count, problem)
+            problem = None
+        if problem:
+            log.warning("%s: suspicious result, offers not saved: %s", chain, problem)
+            storage.finish_run(run_id, "suspicious", count, content_hash, problem)
+            return "suspicious"
+
+        stats = storage.save_offers(run_id, chain, offers)
+        storage.finish_run(run_id, "ok", count, content_hash)
+        log.info("%s: ok, %s", chain, stats)
+        return "ok"
+    except Exception as exc:  # one chain's failure must not stop the others
+        log.exception("%s: collection failed", chain)
+        storage.finish_run(run_id, "failed", None, content_hash, f"{type(exc).__name__}: {exc}")
+        return "failed"
+
+
+def collect(
+    settings: Settings,
+    chains: Sequence[str] | None = None,
+    scheduled: bool = False,
+    export: bool = True,
+    now: datetime | None = None,
+    sources: Mapping[str, Source] | None = None,
+    http: HttpClient | None = None,
+    accept_suspicious: bool = False,
+) -> int:
+    """Run collection for the chosen chains. Exit code: 0 ok/skipped, 1 problem, 2 another run in progress."""
+    now_utc = _as_utc(now)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with collection_lock(settings.data_dir / LOCK_NAME):
+            return _collect_locked(settings, chains, scheduled, export, now_utc, sources, http, accept_suspicious)
+    except LockBusyError as exc:
+        log.error("another run in progress: %s", exc)
+        return EXIT_BUSY
+
+
+def _collect_locked(
+    settings: Settings,
+    chains: Sequence[str] | None,
+    scheduled: bool,
+    export: bool,
+    now_utc: datetime,
+    sources: Mapping[str, Source] | None,
+    http: HttpClient | None,
+    accept_suspicious: bool = False,
+) -> int:
+    available = dict(sources) if sources is not None else build_sources(settings)
+    selected = list(chains) if chains else list(available)
+    code = EXIT_OK
+    own_http = http is None
+    client = http or HttpClient(
+        settings.user_agent, settings.timeout, settings.delay_seconds, settings.retries, settings.backoff_seconds
+    )
+    with Storage(settings.db_path) as storage:
+        try:
+            for name in selected:
+                source = available.get(name)
+                if source is None:
+                    log.warning("%s: disabled or unknown, skipped", name)
+                    continue
+                if scheduled and not is_due(
+                    name, storage, settings.slots, settings.tz, now_utc, settings.max_retries_per_slot
+                ):
+                    log.info("%s: not due, skipped", name)
+                    continue
+                status = run_chain(source, storage, client, settings, scheduled, now_utc, accept_suspicious)
+                if status != "ok":
+                    code = EXIT_PROBLEM
+        finally:
+            if own_http:
+                client.close()
+        try:
+            purge_raw(settings.data_dir / "raw", settings.raw_retention_days, now_utc)
+        except OSError:
+            log.exception("raw retention cleanup failed")
+        if export:  # always: refreshes stale flags even when every chain was skipped
+            try:
+                export_all(storage, settings, now_utc)
+            except Exception:
+                log.exception("export failed")
+                code = EXIT_PROBLEM
+    return code
