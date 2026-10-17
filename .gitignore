@@ -1,6 +1,7 @@
 .env
 .venv/
-data/
+# runtime data (SQLite, exports, raw archive) only at the repo root — not web/src/data
+/data/
 .ojc-usage/
 __pycache__/
 *.pyc
