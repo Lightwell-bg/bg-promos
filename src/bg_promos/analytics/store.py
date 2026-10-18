@@ -369,10 +369,18 @@ class AnalyticsStore:
                 f"AND e.name = 'search' AND json_extract(e.props,'$.results') = 0 "
                 f"AND json_extract(e.props,'$.query') IS NOT NULL "
                 f"GROUP BY q ORDER BY n DESC, q LIMIT 50", ev_params)]
-            errors = [dict(name=r["nm"], where=r["wh"], count=r["n"]) for r in conn.execute(
+            # MAX(e.ts) makes SQLite take the bare columns (stack, path) from the latest row of a group.
+            errors = [dict(name=r["nm"], where=r["wh"], message=r["msg"], source=r["src"], file=r["fl"],
+                           line=r["ln"], col=r["cl"], count=r["n"], last_seen=r["last_seen"],
+                           stack=r["stk"], path=r["pth"])
+                      for r in conn.execute(
                 f"SELECT json_extract(e.props,'$.name') AS nm, json_extract(e.props,'$.where') AS wh, "
-                f"COUNT(*) AS n {ev_from} {ev_where} AND e.name = 'app_error' "
-                f"GROUP BY nm, wh ORDER BY n DESC LIMIT 50", ev_params)]
+                f"json_extract(e.props,'$.message') AS msg, json_extract(e.props,'$.source') AS src, "
+                f"json_extract(e.props,'$.file') AS fl, json_extract(e.props,'$.line') AS ln, "
+                f"json_extract(e.props,'$.col') AS cl, COUNT(*) AS n, MAX(e.ts) AS last_seen, "
+                f"json_extract(e.props,'$.stack') AS stk, json_extract(e.props,'$.path') AS pth "
+                f"{ev_from} {ev_where} AND e.name = 'app_error' "
+                f"GROUP BY nm, wh, msg, src, fl, ln ORDER BY n DESC, last_seen DESC LIMIT 50", ev_params)]
             active = [r[0] for r in conn.execute(
                 f"SELECT DISTINCT s.visitor_id {sess_from} WHERE s.started_at >= ? AND s.started_at < ?{flt}",
                 [lo, hi, *fp])]

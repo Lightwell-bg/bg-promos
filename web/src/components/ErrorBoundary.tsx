@@ -46,9 +46,9 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error, _info: ErrorInfo): void {
-    // Class name and place only: never the message or the stack.
-    reportAppError(error, "boundary");
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Technical description (message, stack, component stack) goes to the internal analytics only.
+    reportAppError(error, "boundary", info.componentStack ?? undefined);
     reloadOnceForChunkError(error);
   }
 

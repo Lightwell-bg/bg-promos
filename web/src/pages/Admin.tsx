@@ -11,6 +11,7 @@ import {
   getMetrics,
   getUser,
   getUsers,
+  type AdminError,
   type AdminFilterOptions,
   type AdminQuery,
   type Metrics,
@@ -109,6 +110,45 @@ function Tile({ label, value, hint }: { label: string; value: number; hint?: str
       <strong className={styles.tileValue}>{value}</strong>
       {hint && <span className={styles.tileHint}>{hint}</span>}
     </div>
+  );
+}
+
+/** One error group; click expands the page path and the stack (plain text, React-escaped). */
+function ErrorRow({ error: e }: { error: AdminError }) {
+  const [open, setOpen] = useState(false);
+  const title = e.message ? `${e.name}: ${e.message}` : e.name;
+  const where = e.source ? `${e.where} · ${e.source}` : e.where;
+  const loc = e.file ? (e.line !== null ? `${e.file}:${e.line}${e.col !== null ? `:${e.col}` : ""}` : e.file) : "—";
+  return (
+    <>
+      <tr className={styles.errRow} onClick={() => setOpen((v) => !v)}>
+        <td className={styles.errTitle}>
+          <button
+            type="button"
+            className={styles.link}
+            aria-expanded={open}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            {title}
+          </button>
+        </td>
+        <td>{where}</td>
+        <td>{loc}</td>
+        <td>{e.count}</td>
+        <td>{fmtTime(e.lastSeen)}</td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={5} className={styles.errDetail}>
+            <div>Страница: {e.path || "—"}</div>
+            <pre className={styles.stack}>{e.stack || "Стек недоступен"}</pre>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -323,20 +363,21 @@ function Dashboard({
               <tr>
                 <th>Ошибка</th>
                 <th>Где</th>
+                <th>Файл:строка</th>
                 <th>Количество</th>
+                <th>Последний раз</th>
               </tr>
             </thead>
             <tbody>
               {metrics?.errors.length ? (
-                metrics.errors.map((e) => (
-                  <tr key={`${e.name}|${e.where}`}>
-                    <td>{e.name}</td>
-                    <td>{e.where}</td>
-                    <td>{e.count}</td>
-                  </tr>
+                metrics.errors.map((e, i) => (
+                  <ErrorRow
+                    key={`${e.name}|${e.where}|${e.message ?? ""}|${e.source ?? ""}|${e.file ?? ""}|${e.line ?? ""}|${i}`}
+                    error={e}
+                  />
                 ))
               ) : (
-                <Empty cols={3} />
+                <Empty cols={5} />
               )}
             </tbody>
           </table>

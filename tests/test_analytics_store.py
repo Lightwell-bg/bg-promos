@@ -56,6 +56,11 @@ class Seed:
 O1 = {"offer_id": "o1", "chain": "lidl", "category": "dairy"}
 O2 = {"offer_id": "o2", "chain": "billa", "category": "meat"}
 O3 = {"offer_id": "o3", "chain": "kaufland", "category": "fruit"}
+ERR_DETAIL = {
+    "name": "RangeError", "where": "window", "message": "boom", "source": "own",
+    "file": "/assets/index-abc.js", "line": 10, "col": 5,
+    "stack": "RangeError: boom\n    at f (/assets/index-abc.js:10:5)", "path": "/ru/cart",
+}
 
 
 @pytest.fixture
@@ -84,6 +89,8 @@ def seeded(store) -> AnalyticsStore:
         ev("search", {"len": 6, "results": 0, "query": "мляко"}),
         ev("search", {"len": 4, "results": 5}),
         ev("app_error", {"name": "TypeError", "where": "Page"}),
+        ev("app_error", ERR_DETAIL), ev("app_error", ERR_DETAIL),
+        ev("app_error", {**ERR_DETAIL, "line": 99}),
     ])
     # E: bot start only
     e = s.tg_visitor(tg(2, "Eve", "eve_e"), bot, "2026-10-11T08:00:00Z")
@@ -128,7 +135,15 @@ def test_metrics_default(seeded):
     assert m["top_offers"]["viewed"][0] == {"offer_id": "o1", "chain": "lidl", "category": "dairy", "count": 2}
     assert [o["offer_id"] for o in m["top_offers"]["carted"]] == ["o1", "o2"]
     assert m["zero_result_queries"] == [{"query": "мляко", "count": 2}]
-    assert m["errors"] == [{"name": "TypeError", "where": "Page", "count": 1}]
+    errors = m["errors"]
+    assert len(errors) == 3  # same name/where/message/file but another line is a separate group
+    top = errors[0]
+    assert (top["name"], top["where"], top["message"], top["source"]) == ("RangeError", "window", "boom", "own")
+    assert (top["file"], top["line"], top["col"], top["count"]) == ("/assets/index-abc.js", 10, 5, 2)
+    assert top["stack"] == "RangeError: boom\n    at f (/assets/index-abc.js:10:5)"
+    assert top["path"] == "/ru/cart" and top["last_seen"].startswith("2026-10-10")
+    old = [e for e in errors if e["name"] == "TypeError"][0]  # legacy event without details
+    assert (old["where"], old["count"], old["message"], old["stack"], old["line"]) == ("Page", 1, None, None, None)
     assert m["period"] == {"from": "2026-10-10", "to": "2026-10-12"}
 
 

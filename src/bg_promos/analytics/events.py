@@ -111,6 +111,30 @@ def _label(maxlen: int) -> Callable[[object], str]:
     return check
 
 
+_CTRL_NO_NL_RE = re.compile(r"[\x00-\x09\x0b-\x1f\x7f-\x9f]")
+
+
+def _text(maxlen: int, multiline: bool = False) -> Callable[[object], str]:
+    """Internal technical text (error message, stack): clipped to ``maxlen`` instead of rejected."""
+    def check(v: object) -> str:
+        if not isinstance(v, str):
+            raise EventError("bad string")
+        if multiline:
+            clean = _CTRL_NO_NL_RE.sub(" ", v.replace("\r\n", "\n").replace("\r", "\n"))
+        else:
+            clean = _WS_RE.sub(" ", _CTRL_RE.sub(" ", v))
+        return clean.strip()[:maxlen]
+    return check
+
+
+def _int_or_null(lo: int, hi: int) -> Callable[[object], int | None]:
+    inner = _int(lo, hi)
+
+    def check(v: object) -> int | None:
+        return None if v is None else inner(v)
+    return check
+
+
 def _keys(v: object) -> list[str]:
     if not isinstance(v, list) or len(v) > 20:
         raise EventError("bad list")
@@ -146,7 +170,15 @@ _SCHEMAS: dict[str, tuple[dict[str, Callable], dict[str, Callable]]] = {
     "share_copy": ({"block": _enum("tg", "web"), "ok": _bool}, {}),
     "cart_import": ({"mode": _regex(re.compile(r"^[a-z_]{1,20}$")),
                      "added": _int(0, 10_000), "missing": _int(0, 10_000)}, {}),
-    "app_error": ({"name": _label(60), "where": _label(60)}, {}),
+    "app_error": ({"name": _label(60), "where": _label(60)}, {
+        "message": _text(300),
+        "source": _enum("own", "external", "unknown"),
+        "file": _text(160),
+        "line": _int_or_null(0, 10_000_000),
+        "col": _int_or_null(0, 10_000_000),
+        "stack": _text(1500, multiline=True),
+        "path": _text(160),
+    }),
 }
 
 EVENT_NAMES = frozenset(_SCHEMAS)
@@ -169,6 +201,9 @@ def validate_props(name: str, props: object) -> dict:
         if key not in props:
             raise EventError("missing props")
         out[key] = check(props[key])
+    for key, opt_check in optional.items():
+        if opt_check is not None and key in props:
+            out[key] = opt_check(props[key])
     if name == "search":
         if "query" in props:
             q = props["query"]

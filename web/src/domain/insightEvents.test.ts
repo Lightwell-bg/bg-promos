@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   changedKeys,
   errorName,
+  errorProps,
   landingSource,
   normalizeQuery,
   parseInitData,
@@ -90,9 +91,59 @@ describe("changedKeys / errorName", () => {
     expect(changedKeys({ a: 1 }, { a: 1 })).toEqual([]);
   });
 
-  it("reports the error class only", () => {
+  it("reports the error class", () => {
     expect(errorName(new TypeError("secret message"))).toBe("TypeError");
     expect(errorName("string")).toBe("Error");
     expect(errorName({ name: "bad <name>" })).toBe("Error");
+  });
+});
+
+describe("errorProps", () => {
+  const ORIGIN = "https://promos.centerai.eu";
+
+  it("classifies a script error without an error object as external ScriptError", () => {
+    const p = errorProps({ where: "window", message: "Script error." }, ORIGIN, "/bg");
+    expect(p).toMatchObject({ name: "ScriptError", source: "external", where: "window", path: "/bg" });
+  });
+
+  it("keeps ResizeObserver noise recognisable", () => {
+    const p = errorProps(
+      { where: "window", message: "ResizeObserver loop completed with undelivered notifications." },
+      ORIGIN,
+      "/",
+    );
+    expect(p.name).toBe("ResizeObserver");
+  });
+
+  it("own vs external vs unknown source; query and hash are dropped from the file", () => {
+    const own = errorProps({ where: "window", message: "x", filename: `${ORIGIN}/assets/a.js?v=2#h`, line: 3, col: 4 }, ORIGIN, "/");
+    expect(own).toMatchObject({ source: "own", file: "/assets/a.js", line: 3, col: 4 });
+    const ext = errorProps({ where: "window", message: "x", filename: "https://cdn.example.com/lib/x.js?k=1", line: 1 }, ORIGIN, "/");
+    expect(ext).toMatchObject({ source: "external", file: "cdn.example.com/lib/x.js" });
+    expect(ext.col).toBeUndefined();
+    expect(errorProps({ where: "window", message: "x" }, ORIGIN, "/")).toMatchObject({ source: "unknown", file: "" });
+  });
+
+  it("a string rejection is a Rejection; the source comes from the stack when there is one", () => {
+    expect(errorProps({ where: "promise", error: "nope", rejection: true }, ORIGIN, "/")).toMatchObject({
+      name: "Rejection",
+      message: "nope",
+      source: "unknown",
+    });
+    const err = new Error("boom");
+    err.stack = `Error: boom\n    at f (${ORIGIN}/assets/index-abc.js:10:5)`;
+    const p = errorProps({ where: "promise", error: err, rejection: true }, ORIGIN, "/");
+    expect(p).toMatchObject({ name: "Error", source: "own", file: "/assets/index-abc.js", line: 10, col: 5 });
+  });
+
+  it("clips every field to its limit", () => {
+    const err = new Error("m".repeat(1000));
+    err.stack = "s".repeat(5000);
+    const p = errorProps({ where: "w".repeat(200), error: err, componentStack: "\n  at X".repeat(500) }, ORIGIN, "/p".repeat(200));
+    expect(String(p.message)).toHaveLength(300);
+    expect(String(p.where)).toHaveLength(60);
+    expect(String(p.stack).length).toBeLessThanOrEqual(1500);
+    expect(String(p.stack)).toContain("Component stack:");
+    expect(String(p.path).length).toBeLessThanOrEqual(160);
   });
 });

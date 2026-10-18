@@ -139,7 +139,22 @@ export interface Metrics {
   kpi: Kpi;
   topOffers: { offerId: string; chain: string | null; views: number; adds: number }[];
   zeroQueries: { query: string; count: number }[];
-  errors: { name: string; where: string; count: number }[];
+  errors: AdminError[];
+}
+
+/** One group of app_error events (same name/where/message/source/file/line). Legacy rows lack the details. */
+export interface AdminError {
+  name: string;
+  where: string;
+  message: string | null;
+  source: string | null;
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  count: number;
+  lastSeen: string | null;
+  stack: string | null;
+  path: string | null;
 }
 
 /** Merges the two backend top lists (viewed / carted, {offer_id, chain, category, count}) by offer. */
@@ -192,7 +207,19 @@ export async function getMetrics(q: AdminQuery): Promise<Metrics> {
     }),
     errors: arr(d.errors).map((x) => {
       const o = obj(x);
-      return { name: str(o.name) ?? "", where: str(o.where) ?? "", count: num(o.count) };
+      return {
+        name: str(o.name) ?? "",
+        where: str(o.where) ?? "",
+        message: str(o.message),
+        source: str(o.source),
+        file: str(o.file),
+        line: typeof o.line === "number" ? o.line : null,
+        col: typeof o.col === "number" ? o.col : null,
+        count: num(o.count),
+        lastSeen: str(o.last_seen),
+        stack: str(o.stack),
+        path: str(o.path),
+      };
     }),
   };
 }

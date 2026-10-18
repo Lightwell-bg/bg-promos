@@ -11,7 +11,7 @@ import { EMPTY_CART, addOffer } from "./domain/cart";
 import { OfferDetail } from "./pages/OfferDetail";
 import { Cart } from "./pages/Cart";
 import { Search } from "./pages/Search";
-import { reportAppError } from "./platform/analytics";
+import { installGlobalErrorHandlers, reportAppError, resetErrorCountersForTests } from "./platform/analytics";
 import { flush, getSessionInfo, resetInsightsForTests, startInsights } from "./platform/insights";
 import { renderWithCart } from "./test/cartHarness";
 
@@ -214,7 +214,9 @@ describe("app_error", () => {
     throw new TypeError("secret message with a name Ivan");
   };
 
-  it("ErrorBoundary reports the class name and place only", async () => {
+  beforeEach(() => resetErrorCountersForTests());
+
+  it("ErrorBoundary reports the technical details incl. the component stack", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     stubFetch();
     await begin();
@@ -224,17 +226,56 @@ describe("app_error", () => {
       </ErrorBoundary>,
     );
     const ev = (await drain()).filter((e) => e.name === "app_error");
-    expect(ev[0].props).toEqual({ name: "TypeError", where: "boundary" });
-    expect(JSON.stringify(ev)).not.toContain("Ivan");
+    expect(ev[0].props).toMatchObject({
+      name: "TypeError",
+      where: "boundary",
+      message: "secret message with a name Ivan",
+      path: "/",
+    });
+    expect(String(ev[0].props.stack)).toContain("Component stack:");
+    expect(String(ev[0].props.stack).length).toBeLessThanOrEqual(1500);
     vi.restoreAllMocks();
   });
 
-  it("reportAppError never sends the message", async () => {
+  it("reportAppError sends the message; the page path has no query or hash", async () => {
     stubFetch();
+    window.history.replaceState(null, "", "/bg/cart?x=1#c1_secretcart");
     await begin();
-    reportAppError(new RangeError("password=hunter2"), "window");
+    reportAppError(new RangeError("bad range"), "window");
     const ev = await drain();
     expect(ev).toHaveLength(1);
-    expect(ev[0].props).toEqual({ name: "RangeError", where: "window" });
+    expect(ev[0].props).toMatchObject({ name: "RangeError", where: "window", message: "bad range", path: "/bg/cart" });
+    expect(JSON.stringify(ev)).not.toContain("secretcart");
+  });
+
+  it("anti-flood: 5 per signature, 20 per page load", async () => {
+    stubFetch();
+    await begin();
+    for (let i = 0; i < 12; i++) reportAppError(new Error("same"), "window");
+    expect((await drain()).filter((e) => e.name === "app_error")).toHaveLength(5);
+    for (let i = 0; i < 30; i++) reportAppError(new Error(`distinct ${i}`), "window");
+    expect((await drain()).filter((e) => e.name === "app_error")).toHaveLength(15);
+  });
+
+  it("window error events are classified (ScriptError, own file, string rejection)", async () => {
+    stubFetch();
+    await begin();
+    installGlobalErrorHandlers();
+    window.dispatchEvent(new ErrorEvent("error", { message: "Script error." }));
+    window.dispatchEvent(
+      new ErrorEvent("error", {
+        message: "Uncaught boom",
+        filename: `${window.location.origin}/assets/index-abc.js?v=1`,
+        lineno: 12,
+        colno: 3,
+      }),
+    );
+    const rejection = new Event("unhandledrejection") as Event & { reason?: unknown };
+    rejection.reason = "plain string";
+    window.dispatchEvent(rejection);
+    const ev = (await drain()).filter((e) => e.name === "app_error").map((e) => e.props);
+    expect(ev[0]).toMatchObject({ name: "ScriptError", source: "external" });
+    expect(ev[1]).toMatchObject({ message: "Uncaught boom", source: "own", file: "/assets/index-abc.js", line: 12, col: 3 });
+    expect(ev[2]).toMatchObject({ name: "Rejection", message: "plain string", where: "promise", source: "unknown" });
   });
 });

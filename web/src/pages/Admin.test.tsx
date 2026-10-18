@@ -195,10 +195,25 @@ describe("admin dashboard", () => {
     expect(tile("Вернувшиеся посетители")).toHaveTextContent("0");
 
     expect(screen.getByRole("region", { name: "Запросы без результатов" })).toHaveTextContent("kinoa");
-    expect(screen.getByRole("region", { name: "Ошибки" })).toHaveTextContent("TypeError");
+    expect(screen.getByRole("region", { name: "Ошибки" })).toHaveTextContent("TypeError: x is undefined");
 
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/выручк|покупок|продаж|отправлен/i);
+  });
+
+  it("errors table: details columns, row expands to the page path and the stack as text", async () => {
+    await renderAdmin();
+    await login();
+    const region = screen.getByRole("region", { name: "Ошибки" });
+    expect(region).toHaveTextContent("boundary · own");
+    expect(region).toHaveTextContent("/assets/index-abc.js:10:5");
+    expect(region).not.toHaveTextContent("Страница:");
+    await userEvent.click(within(region).getByRole("button", { name: "TypeError: x is undefined" }));
+    expect(region).toHaveTextContent("Страница: /ru/cart");
+    const pre = region.querySelector("pre") as HTMLElement;
+    expect(pre.textContent).toContain("at f (/assets/index-abc.js:10:5)");
+    await userEvent.click(within(region).getByRole("button", { name: "TypeError: x is undefined" }));
+    expect(region.querySelector("pre")).toBeNull();
   });
 
   it("top offers: ids are resolved to names from the catalog, unknown ids fall back to the id", async () => {

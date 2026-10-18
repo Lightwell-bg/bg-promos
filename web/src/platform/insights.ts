@@ -27,7 +27,7 @@ export const FLUSH_MS = 5_000;
 export const MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 2_000;
 const QUEUE_CAP = 200;
-const ERROR_CAP = 10;
+const ERROR_CAP = 20;
 
 export type Platform = "web" | "miniapp";
 
@@ -244,13 +244,38 @@ function payload(batch: QueuedEvent[]): unknown {
   };
 }
 
+/** The server refuses bodies over 32 KB (413): stay well below it, with room for token + session id. */
+export const BATCH_MAX_BYTES = 28_000;
+
+function byteLength(s: string): number {
+  return typeof TextEncoder !== "undefined" ? new TextEncoder().encode(s).length : s.length * 3;
+}
+
+/**
+ * Takes the next batch off the queue: up to BATCH_MAX events AND at most BATCH_MAX_BYTES of
+ * serialized events (detailed app_error events are large). At least one event is always taken;
+ * a single event is clipped by the builders far below the limit.
+ */
+function takeBatch(): QueuedEvent[] {
+  let bytes = 0;
+  let n = 0;
+  for (const e of queue) {
+    if (n >= BATCH_MAX) break;
+    const size = byteLength(JSON.stringify({ event_id: e.event_id, name: e.name, ts: e.ts, props: e.props })) + 1;
+    if (n > 0 && bytes + size > BATCH_MAX_BYTES) break;
+    bytes += size;
+    n++;
+  }
+  return queue.splice(0, n);
+}
+
 /** Sends one batch; on a network error / 5xx the SAME event_ids go back to the queue (bounded). */
 export async function flush(): Promise<void> {
   clearTimer();
   if (!active || dead || !token || flushing || queue.length === 0) return;
   flushing = true;
   const gen = generation;
-  const batch = queue.splice(0, BATCH_MAX);
+  const batch = takeBatch();
   let retry = false;
   try {
     const res = await postJson("/api/v1/analytics/events", payload(batch));
@@ -285,7 +310,7 @@ export function flushOnHide(): void {
   if (!active || dead || !token || queue.length === 0) return;
   clearTimer();
   while (queue.length) {
-    const batch = queue.splice(0, BATCH_MAX);
+    const batch = takeBatch();
     const body = JSON.stringify(payload(batch));
     const url = apiUrl("/api/v1/analytics/events");
     let sent = false;

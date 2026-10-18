@@ -103,6 +103,25 @@ def test_event_id_and_ts():
     assert z["ts"] == "2026-10-18T12:00:00Z"
 
 
+def test_app_error_details_are_clipped_not_rejected():
+    out = validate_props("app_error", {
+        "name": "RangeError", "where": "window", "message": "m" * 1000, "source": "external",
+        "file": "https://cdn.example.com/" + "a" * 500, "line": None, "col": 7,
+        "stack": ("line\n" * 1000) + "\x00", "path": "/" + "p" * 500,
+    })
+    assert len(out["message"]) == 300 and len(out["file"]) == 160 and len(out["path"]) == 160
+    assert len(out["stack"]) == 1500 and "\n" in out["stack"] and "\x00" not in out["stack"]
+    assert out["line"] is None and out["col"] == 7 and out["source"] == "external"
+
+
+@pytest.mark.parametrize("bad", [
+    {"source": "elsewhere"}, {"line": -1}, {"line": True}, {"line": "3"}, {"message": 5}, {"stack": ["x"]},
+])
+def test_app_error_bad_detail_types_rejected(bad):
+    with pytest.raises(EventError):
+        validate_props("app_error", {"name": "E", "where": "window", **bad})
+
+
 def test_search_query_only_for_zero_results():
     with pytest.raises(EventError):
         validate_props("search", {"len": 4, "results": 2, "query": "milk"})

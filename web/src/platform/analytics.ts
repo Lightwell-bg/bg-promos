@@ -1,4 +1,4 @@
-import { errorName, type InsightName, type InsightProps } from "../domain/insightEvents";
+import { errorProps, type ErrorInfoInput, type InsightName, type InsightProps } from "../domain/insightEvents";
 import { clarityEvent } from "./clarity";
 import { record as recordInsight, type RecordOptions } from "./insights";
 
@@ -47,9 +47,42 @@ export function record(name: InsightName, props: InsightProps = {}, opts: Record
   }
 }
 
-/** Error report: class name and a short "where" only; never the message or the stack. */
-export function reportAppError(error: unknown, where: string): void {
-  record("app_error", { name: errorName(error), where: where.slice(0, 60) });
+const ERROR_PER_SIGNATURE = 5;
+const ERROR_TOTAL = 20;
+let errorTotal = 0;
+const errorSignatures = new Map<string, number>();
+
+/** Test helper: forget the per page-load anti-flood counters. */
+export function resetErrorCountersForTests(): void {
+  errorTotal = 0;
+  errorSignatures.clear();
+}
+
+/**
+ * Error report -> INTERNAL analytics only (name, message, file, line, stack, page path): the owner
+ * wants the details to fix bugs. Never passed to Clarity or GA4. Anti-flood: at most 5 per
+ * signature (name + message + file + line) and 20 in total per page load.
+ */
+export function reportError(input: ErrorInfoInput): void {
+  try {
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
+    const pathname = typeof window === "undefined" ? "" : window.location.pathname;
+    const props = errorProps(input, origin, pathname);
+    const sig = `${props.name}|${props.message}|${props.file}|${props.line ?? ""}`;
+    const n = errorSignatures.get(sig) ?? 0;
+    if (n >= ERROR_PER_SIGNATURE || errorTotal >= ERROR_TOTAL) return;
+    if (record("app_error", props)) {
+      errorSignatures.set(sig, n + 1);
+      errorTotal++;
+    }
+  } catch {
+    /* error reporting must never throw */
+  }
+}
+
+/** Error caught somewhere in the app (ErrorBoundary and similar). */
+export function reportAppError(error: unknown, where: string, componentStack?: string): void {
+  reportError({ where, error, componentStack });
 }
 
 let handlersInstalled = false;
@@ -58,6 +91,17 @@ let handlersInstalled = false;
 export function installGlobalErrorHandlers(): void {
   if (handlersInstalled || typeof window === "undefined") return;
   handlersInstalled = true;
-  window.addEventListener("error", (e) => reportAppError(e.error, "window"));
-  window.addEventListener("unhandledrejection", (e) => reportAppError(e.reason, "promise"));
+  window.addEventListener("error", (e) =>
+    reportError({
+      where: "window",
+      error: e.error ?? undefined,
+      message: e.message,
+      filename: e.filename,
+      line: e.lineno,
+      col: e.colno,
+    }),
+  );
+  window.addEventListener("unhandledrejection", (e) =>
+    reportError({ where: "promise", error: e.reason, rejection: true }),
+  );
 }

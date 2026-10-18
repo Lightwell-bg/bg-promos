@@ -18,5 +18,19 @@
     ]
   },
   "zero_result_queries": [{ "query": "kinoa", "count": 1 }],
-  "errors": [{ "name": "TypeError", "where": "boundary", "count": 1 }]
+  "errors": [
+    {
+      "name": "TypeError",
+      "where": "boundary",
+      "message": "x is undefined",
+      "source": "own",
+      "file": "/assets/index-abc.js",
+      "line": 10,
+      "col": 5,
+      "count": 1,
+      "last_seen": "2026-10-18T09:30:00Z",
+      "stack": "TypeError: x is undefined\n    at f (/assets/index-abc.js:10:5)",
+      "path": "/ru/cart"
+    }
+  ]
 }

@@ -187,6 +187,19 @@ describe("insights: event queue", () => {
     expect(sizes.reduce((a, b) => a + b, 0)).toBe(120);
   });
 
+  it("caps a request by size (server limit 32 KB) when events are large", async () => {
+    const f = installFetch();
+    startInsights("bg");
+    await tick();
+    const big = { name: "Error", where: "window", message: "m".repeat(300), stack: "é".repeat(1500), path: "/bg" };
+    for (let i = 0; i < 18; i++) record("app_error", { ...big, line: i });
+    await tick(20_000);
+    const calls = f.events();
+    expect(calls.length).toBeGreaterThan(1);
+    for (const c of calls) expect(new TextEncoder().encode(JSON.stringify(c.body)).length).toBeLessThan(32 * 1024);
+    expect(calls.reduce((a, c) => a + c.body.events.length, 0)).toBe(18);
+  });
+
   it("retries a failed batch with the SAME event_id (max 3 sends), then drops it silently", async () => {
     const f = installFetch({ eventFailures: Infinity });
     startInsights("bg");

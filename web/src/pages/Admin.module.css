@@ -214,6 +214,42 @@
   font-size: 14px;
 }
 
+.errRow {
+  cursor: pointer;
+}
+
+.errTitle {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.errTitle .link {
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.errDetail {
+  white-space: normal !important;
+  max-width: 0; /* the cell never widens the table: long lines scroll inside the <pre> */
+  min-width: 100%;
+}
+
+.stack {
+  margin: 4px 0 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--bg, #f6f6f6);
+  border-radius: var(--radius-sm);
+}
+
 .props {
   display: block;
   font-size: 12px;

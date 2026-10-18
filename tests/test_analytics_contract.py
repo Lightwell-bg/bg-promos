@@ -55,7 +55,11 @@ def seed(api):
         event("search", {"len": 5, "results": 0, "query": "kinoa"}),
         event("share_link_created", {"lines": 2, "telegram": True}),
         event("cart_import", {"mode": "created", "added": 2, "missing": 0}),
-        event("app_error", {"name": "TypeError", "where": "boundary"}),
+        event("app_error", {
+            "name": "TypeError", "where": "boundary", "message": "x is undefined", "source": "own",
+            "file": "/assets/index-abc.js", "line": 10, "col": 5,
+            "stack": "TypeError: x is undefined\n    at f (/assets/index-abc.js:10:5)", "path": "/ru/cart",
+        }),
     ]
     assert send(api, sess, events).status_code == 200
     return tg, sess
@@ -103,7 +107,12 @@ def test_admin_numbers_and_params(api):
     assert (m["cart_add_users"], m["share_links"], m["imports_successful"]) == (1, 1, 1)
     assert m["top_offers"]["viewed"][0] == {"offer_id": "a1b2c3d4e5f1", "chain": "lidl", "category": "dairy", "count": 2}
     assert m["zero_result_queries"] == [{"query": "kinoa", "count": 1}]
-    assert m["errors"] == [{"name": "TypeError", "where": "boundary", "count": 1}]
+    assert len(m["errors"]) == 1
+    err = m["errors"][0]
+    assert {k: err[k] for k in ("name", "where", "message", "source", "file", "line", "col", "count", "path")} == {
+        "name": "TypeError", "where": "boundary", "message": "x is undefined", "source": "own",
+        "file": "/assets/index-abc.js", "line": 10, "col": 5, "count": 1, "path": "/ru/cart"}
+    assert err["stack"].startswith("TypeError: x is undefined") and err["last_seen"].endswith("Z")
     # filter params used by the frontend
     assert api.get("/api/admin/metrics", params={**day, "source_kind": "utm"}).json()["users"]["total"] == 1
     assert api.get("/api/admin/metrics", params={**day, "source": "telegram"}).json()["users"]["total"] == 1

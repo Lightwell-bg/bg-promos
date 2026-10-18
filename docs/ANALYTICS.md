@@ -50,9 +50,10 @@ visitors are kept until deleted manually in /admin (deletes the visitor, session
 | `share_link_created` | share panel opened with links | `{lines:int, telegram:bool}` |
 | `share_copy` | copy button | `{block:"tg"|"web", ok:bool}` |
 | `cart_import` | import finished | `{mode, added:int, missing:int}` (count only `filled`/`created` as successful) |
-| `app_error` | ErrorBoundary / window error | `{name: str ≤60, where: str ≤60}` — no messages, no stack |
+| `app_error` | ErrorBoundary / window error / unhandled rejection | `{name ≤60, where ≤60 (window\|promise\|boundary), message ≤300, source:"own"\|"external"\|"unknown", file ≤160 (own: path; external: host+path; no query), line:int\|null, col:int\|null, stack ≤1500 (+ React component stack), path ≤160 (location.pathname, no query/hash)}` — the last seven are optional; the server clips instead of rejecting. Client anti-flood: ≤5 per signature (name+message+file+line), ≤20 per page load. Batches are also capped at ~28 KB of serialized events (server limit 32 KB) |
 Never: names, usernames, Telegram ids, list contents, prices of a user's list, free text
-(except the zero-result `query` above, internal only, never sent to Clarity/GA4).
+(except the zero-result `query` above and the technical `app_error` details: message, stack, file, page
+path — owner decision 2026-10-18; both internal only, never sent to Clarity/GA4).
 "Создание ссылки" ≠ "отправка"; "открытие приложения" ≠ "каталог загружен".
 
 ## API
@@ -90,7 +91,8 @@ Never: names, usernames, Telegram ids, list contents, prices of a user's list, f
 - share links created; successful imports (`cart_import` with mode filled|created)
 - returning visitors = visitors with sessions on ≥ 2 different Sofia days (ever, active in period)
 - top offers (by `offer_view` and by `cart_add`), zero-result queries (count by query), errors
-  (`app_error` by name/where)
+  (`app_error` grouped by name/where/message/source/file/line, with count, last seen and the latest
+  stack and page path)
 - Never present cart sums as revenue or purchases.
 
 ## Clarity
