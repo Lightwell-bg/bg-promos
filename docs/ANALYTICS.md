@@ -26,7 +26,8 @@ visitors(id TEXT PK            -- opaque internal id ("v_" + 20 hex), also used 
          anon_key TEXT UNIQUE NULL  -- sha256(client anonymous id) for site visitors
          first_seen, last_seen, first_source_id FK, is_test INT DEFAULT 0)
 sessions(id TEXT PK (client uuid), visitor_id FK, platform 'web'|'miniapp'|'bot',
-         started_at, last_at, source_id FK, lang, is_automated INT, is_test INT)
+         started_at, last_at, source_id FK, lang, is_automated INT, is_test INT,
+         source_inherited INT DEFAULT 0)   -- v3: 1 = source taken from the visitor's earlier session
 events(id PK, event_id TEXT UNIQUE   -- client uuid → idempotent re-sends
        visitor_id, session_id, ts, name, platform, props JSON)
 ```
@@ -80,6 +81,23 @@ path — owner decision 2026-10-18; both internal only, never sent to Clarity/GA
 - Schema v2: `sessions.visitor_id`, `events.visitor_id`, `events.session_id` are foreign keys
   `ON DELETE CASCADE` (`PRAGMA foreign_keys=ON` on every connection). Event inserts re-check the
   session/visitor inside the same write transaction (deleted meanwhile -> 401, nothing written).
+- Schema v3 (`PRAGMA user_version = 3`): adds `sessions.source_inherited INTEGER NOT NULL DEFAULT 0`;
+  existing databases are upgraded in place on start (idempotent).
+- Shared-cart labels (owner decision 2026-10-18): every share link tags itself.
+  Telegram: `startapp=s_share-tg__c1_…` (campaign `share`, placement `tg`; the 512-char cap includes the
+  prefix, a list that does not fit falls back to the web link only). Web:
+  `/<lang>/cart/import?utm_source=share&utm_medium=cart&utm_campaign=share&utm_content=web#c=…` (the cart
+  stays in the fragment; UTM is captured at launch before any URL cleanup). Legacy links without labels:
+  a Mini App `start_param` that is a bare `c1_…` -> `startapp / telegram / miniapp`, campaign `share`,
+  placement `legacy`; a web session opened on `/<lang>/cart/import` with no utm at all -> the client sends
+  `utm_source=share, utm_campaign=share, utm_content=legacy`.
+- 30-day inheritance (owner decision 2026-10-18): a new session (web, miniapp or bot) whose resolved source
+  is `unknown` takes the `source_id` of the same visitor's most recent session with its OWN known label
+  (`source_inherited = 0`, so inherited sessions never extend the window) that
+  started within the last 30 days (UTC `started_at`); the session is flagged `source_inherited = 1`. Older
+  or none -> stays `unknown`. It is decided inside the same write transaction that creates the session.
+  `visitors.first_source_id` is unchanged. Metrics filters by source count inherited sessions under the
+  inherited source; /admin marks them "(унаследован)" in the user card. `bot_start.payload_kind` is unchanged.
 - Bot `/start`: session and event ids are uuid5 of the Telegram update (`update_id`, else chat +
   message id), so a redelivered update changes nothing.
 

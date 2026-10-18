@@ -179,7 +179,7 @@ describe("sharing and managing lists", () => {
     const web = (await screen.findByRole("textbox", { name: "За браузър" })) as HTMLInputElement;
     expect(new URL(web.value).pathname).toBe("/bg/cart/import");
     const input = screen.getByRole("textbox", { name: "Telegram" }) as HTMLInputElement;
-    expect(input.value).toMatch(/^https:\/\/t\.me\/promoseubot\?startapp=c1_[0-9a-f]{12}/);
+    expect(input.value).toMatch(/^https:\/\/t\.me\/promoseubot\?startapp=s_share-tg__c1_[0-9a-f]{12}/);
     expect(input.value).toBe(`https://t.me/promoseubot?startapp=${encodeStartParam(cartOf([A, 2], [B, 1]))}`);
     const tg = screen.getByRole("link", { name: "Изпрати в Telegram" }) as HTMLAnchorElement;
     const tgUrl = new URL(tg.href);

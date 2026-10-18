@@ -123,6 +123,7 @@ Full contract: [docs/ANALYTICS.md](docs/ANALYTICS.md). Internal analytics, Clari
 | `admin_cookie_secure` | `true` | Keep `true` on the server (https); `false` only for local http. Env override: `BG_PROMOS_ADMIN_COOKIE_SECURE=0` |
 
 - **Clarity Project ID**: https://clarity.microsoft.com -> New project (Website `https://promos.centerai.eu`) -> Settings -> Overview -> Project ID. Put it into `config.ini` `[web] clarity_id`, then `docker compose up -d --force-recreate api web`. Docs: https://learn.microsoft.com/clarity/.
+- **Campaign link format**: bot `https://t.me/promoseubot?start=s_<campaign>[-<placement>]`, Mini App `https://t.me/promoseubot?startapp=s_<campaign>[-<placement>]`, site `https://promos.centerai.eu/?utm_source=…&utm_campaign=…`. Shared carts are tagged automatically (`share`); a session without a label inherits the visitor's last known source from the last 30 days (marked "(унаследован)" in `/admin`). Details: [docs/ANALYTICS.md](docs/ANALYTICS.md).
 - **Secrets**: set `ANALYTICS_SECRET` and `ADMIN_PASSWORD` in `.env` (template: `.env.example`).
 - **Admin page**: `/admin` (for example `https://promos.centerai.eu/admin`; not linked from the site, `noindex`). Enter `ADMIN_PASSWORD`; the session lasts 12 hours, 5 wrong passwords per IP lock the login for 15 minutes. Local steps: [docs/QUICK_START.md](docs/QUICK_START.md).
 

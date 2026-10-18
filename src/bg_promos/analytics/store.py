@@ -27,7 +27,7 @@ from .telegram import TelegramUser
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PLATFORMS = ("web", "miniapp", "bot")
 
 _SCHEMA_V1 = """
@@ -123,7 +123,12 @@ ALTER TABLE sessions_new RENAME TO sessions;
 ALTER TABLE events_new RENAME TO events;
 """ + _INDEXES
 
-_MIGRATIONS = {1: _SCHEMA_V1, 2: _SCHEMA_V2}
+# v3: sessions.source_inherited = 1 when the session had no label and took the visitor's last known source.
+_SCHEMA_V3 = "ALTER TABLE sessions ADD COLUMN source_inherited INTEGER NOT NULL DEFAULT 0"
+
+INHERIT_DAYS = 30
+
+_MIGRATIONS = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3}
 
 
 class SessionGone(Exception):
@@ -243,13 +248,28 @@ class AnalyticsStore:
         self, session_id: str, visitor_id: str, platform: str, source_id: int, lang: str | None,
         is_automated: bool, is_test: bool, now: datetime,
     ) -> bool:
-        """Create the session; False when it already exists (idempotent on session_id)."""
+        """Create the session; False when it already exists (idempotent on session_id).
+
+        A session whose source is "unknown" inherits the source of the visitor's most recent session
+        with a known source started within the last 30 days (same write transaction, flag set).
+        """
         ts = utc_iso(now)
         with self._tx() as conn:
+            inherited = 0
+            kind = conn.execute("SELECT kind FROM sources WHERE id=?", (source_id,)).fetchone()
+            if kind is not None and kind["kind"] == "unknown":
+                prev = conn.execute(
+                    "SELECT s.source_id FROM sessions s JOIN sources src ON src.id = s.source_id "
+                    "WHERE s.visitor_id=? AND src.kind <> 'unknown' AND s.source_inherited = 0 AND s.started_at >= ? AND s.started_at <= ? "
+                    "ORDER BY s.started_at DESC, s.rowid DESC LIMIT 1",
+                    (visitor_id, utc_iso(now - timedelta(days=INHERIT_DAYS)), ts)).fetchone()
+                if prev is not None:
+                    source_id, inherited = prev["source_id"], 1
             cur = conn.execute(
                 "INSERT OR IGNORE INTO sessions(id, visitor_id, platform, started_at, last_at, source_id, "
-                "lang, is_automated, is_test) VALUES (?,?,?,?,?,?,?,?,?)",
-                (session_id, visitor_id, platform, ts, ts, source_id, lang, int(is_automated), int(is_test)),
+                "lang, is_automated, is_test, source_inherited) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (session_id, visitor_id, platform, ts, ts, source_id, lang, int(is_automated), int(is_test),
+                 inherited),
             )
             if cur.rowcount and is_test:
                 conn.execute("UPDATE visitors SET is_test=1 WHERE id=?", (visitor_id,))
@@ -477,6 +497,7 @@ class AnalyticsStore:
                 {"session_id": r["id"], "platform": r["platform"], "started_at": r["started_at"],
                  "last_at": r["last_at"], "lang": r["lang"], "is_automated": bool(r["is_automated"]),
                  "is_test": bool(r["is_test"]), "source": _src_row(r),
+                 "source_inherited": bool(r["source_inherited"]),
                  "events": r["events"]}
                 for r in conn.execute(
                     "SELECT s.*, src.kind, src.source, src.medium, src.campaign, src.placement, "

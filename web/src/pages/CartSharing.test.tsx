@@ -91,6 +91,15 @@ describe("received list", () => {
     expect(pairs(activeCart(s).cart)).toEqual([[A, 3], [B, 2]].sort());
   });
 
+  it("web share link with utm query: the list is read from the hash and imported", async () => {
+    window.history.replaceState(
+      null, "", `/bg/cart/import?utm_source=share&utm_medium=cart&utm_campaign=share&utm_content=web${link}`);
+    await renderWithCart(<Routed />, { route: "/bg/cart/import" });
+    await screen.findByText("Количката е заредена от връзката");
+    expect(pairs(activeCart(stored()).cart)).toEqual([[A, 3], [B, 2]].sort());
+    expect(window.location.hash).toBe("");
+  });
+
   it("device with history: two lists, own one intact, shared quantities preserved", async () => {
     window.history.replaceState(null, "", `/bg/cart/import${link}`);
     await renderWithCart(<Routed />, {

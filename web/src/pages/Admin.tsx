@@ -571,7 +571,7 @@ function UserView({
                       <tr key={s.id}>
                         <td>{fmtTime(s.startedAt)}</td>
                         <td>{s.platform || "—"}</td>
-                        <td>{s.source ?? NO_SOURCE}</td>
+                        <td>{s.source ?? NO_SOURCE}{s.inherited ? " (унаследован)" : ""}</td>
                         <td>{s.lang ?? "—"}</td>
                       </tr>
                     ))

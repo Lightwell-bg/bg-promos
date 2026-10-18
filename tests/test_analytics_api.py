@@ -154,9 +154,43 @@ def test_miniapp_session_uses_verified_init_data(api):
     assert card["first_source"] == {"kind": "startapp", "source": "telegram", "medium": "miniapp",
                                     "campaign": "spring", "placement": "ig"}
     assert rows(api, "SELECT COUNT(*) FROM events WHERE name='miniapp_open'")[0][0] == 1
-    # cart-only startapp param: source unknown
+    # old cart-only startapp param: legacy share source
     r2 = miniapp(api, make_init_data(auth_date=ts, user={"id": 77, "first_name": "B"}, start_param="c1_xyz"))
-    assert api.svc.store.user_card(r2.json()["visitor_id"])["first_source"]["kind"] == "unknown"
+    assert api.svc.store.user_card(r2.json()["visitor_id"])["first_source"] == {
+        "kind": "startapp", "source": "telegram", "medium": "miniapp", "campaign": "share", "placement": "legacy"}
+    # garbage start param: source unknown
+    r3 = miniapp(api, make_init_data(auth_date=ts, user={"id": 78, "first_name": "C"}, start_param="garbage"))
+    assert api.svc.store.user_card(r3.json()["visitor_id"])["first_source"]["kind"] == "unknown"
+
+
+def test_miniapp_share_label_and_inheritance(api):
+    ts = int(START.timestamp()) - 60
+    r = miniapp(api, make_init_data(auth_date=ts, start_param="s_share-tg__c1_abc"))
+    card = api.svc.store.user_card(r.json()["visitor_id"])
+    assert card["first_source"]["campaign"] == "share" and card["first_source"]["placement"] == "tg"
+    # plain re-open 2 days later inherits the share source
+    api.clock.now = START + timedelta(days=2)
+    r2 = miniapp(api, make_init_data(auth_date=int(api.clock.now.timestamp()) - 60))
+    card = api.svc.store.user_card(r2.json()["visitor_id"])
+    newest = card["sessions"][0]
+    assert newest["source_inherited"] is True and newest["source"]["campaign"] == "share"
+
+
+def test_web_session_inherits_within_30_days_only(api):
+    anon = uid()
+    web_session(api, anon_id=anon, utm={"utm_source": "ig", "utm_campaign": "autumn"})
+    api.clock.now = START + timedelta(days=29)
+    web_session(api, anon_id=anon)
+    api.clock.now = START + timedelta(days=60)  # > 30 days after the last LABELED session
+    web_session(api, anon_id=anon)
+    res = rows(api, "SELECT src.kind, s.source_inherited FROM sessions s JOIN sources src ON src.id=s.source_id "
+                    "ORDER BY s.started_at")
+    assert res == [("utm", 0), ("utm", 1), ("unknown", 0)]
+    # own label wins over inheritance
+    api.clock.now = START + timedelta(days=61)
+    web_session(api, anon_id=anon, utm={"utm_source": "fb"})
+    assert rows(api, "SELECT src.source, s.source_inherited FROM sessions s JOIN sources src ON src.id=s.source_id "
+                     "ORDER BY s.started_at DESC LIMIT 1") == [("fb", 0)]
 
 
 def test_miniapp_rejects_forged_and_never_logs_init_data(api, caplog):

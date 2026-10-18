@@ -175,17 +175,32 @@ export function shareFromHash(hash: string): string | null {
 export const START_PARAM_MAX = 512;
 const START_PARAM_RE = /^[A-Za-z0-9_-]{1,512}$/;
 
-/** startapp value for the list, or null when empty or longer than Telegram allows. */
+/** Source label of every Telegram share link (campaign "share", placement "tg"). */
+export const SHARE_TG_PREFIX = "s_share-tg__";
+
+/**
+ * startapp value for the list ("s_share-tg__c1_..."), or null when empty or when the whole value
+ * (prefix included) is longer than Telegram allows.
+ */
 export function encodeStartParam(cart: CartState): string | null {
   const items = cart.lines.filter((l) => ID_RE.test(l.offerId));
   if (!items.length) return null;
-  const p = "c1" + items.map((l) => `_${l.offerId}${amountSuffix(l, true)}`).join("");
+  const p = SHARE_TG_PREFIX + "c1" + items.map((l) => `_${l.offerId}${amountSuffix(l, true)}`).join("");
   return p.length <= START_PARAM_MAX ? p : null;
 }
 
-/** Parse an untrusted startapp value ("c1_<id>[-<qty>]..."); invalid parts skipped, duplicates merged. */
+/**
+ * Parse an untrusted startapp value ("[s_<campaign>[-<placement>]__]c1_<id>[-<qty>]..."); the optional
+ * source label is ignored here, invalid parts skipped, duplicates merged.
+ */
 export function decodeStartParam(param: string | null | undefined): SharedItem[] {
-  if (!param || !START_PARAM_RE.test(param) || !param.startsWith("c1_")) return [];
+  if (!param || !START_PARAM_RE.test(param)) return [];
+  if (param.startsWith("s_")) {
+    const i = param.indexOf("__");
+    if (i < 0) return [];
+    param = param.slice(i + 2);
+  }
+  if (!param.startsWith("c1_")) return [];
   // startapp form: a bare "<id>" means 1 piece
   return mergeItems(param.slice(3).split("_"), 1, MAX_SHARED_LINES);
 }
@@ -194,8 +209,11 @@ export function telegramStartLink(botUsername: string, param: string): string {
   return `https://t.me/${botUsername.replace(/^@/, "")}?startapp=${param}`;
 }
 
+/** Web share link; the query tags the source (read at launch), the cart travels in the fragment. */
+export const SHARE_WEB_QUERY = "utm_source=share&utm_medium=cart&utm_campaign=share&utm_content=web";
+
 export function shareUrl(siteOrigin: string, lang: string, value: string): string {
-  return `${siteOrigin.replace(/\/+$/, "")}/${lang}/cart/import#c=${value}`;
+  return `${siteOrigin.replace(/\/+$/, "")}/${lang}/cart/import?${SHARE_WEB_QUERY}#c=${value}`;
 }
 
 /** Order-insensitive fingerprint of a shared list (FNV-1a over the sorted items). */

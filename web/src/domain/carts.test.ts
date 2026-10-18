@@ -9,6 +9,7 @@ import {
   deleteCart,
   encodeShare,
   encodeStartParam,
+  SHARE_TG_PREFIX,
   START_PARAM_MAX,
   telegramStartLink,
   importKeyOf,
@@ -83,8 +84,12 @@ describe("share codec", () => {
     expect(shareFromHash("")).toBeNull();
   });
 
-  it("shareUrl builds an absolute fragment link", () => {
-    expect(shareUrl("https://x.test/", "bg", "1.a")).toBe("https://x.test/bg/cart/import#c=1.a");
+  it("shareUrl builds an absolute link: utm source tags in the query, the cart in the fragment", () => {
+    const url = shareUrl("https://x.test/", "bg", "1.a");
+    expect(url).toBe(
+      "https://x.test/bg/cart/import?utm_source=share&utm_medium=cart&utm_campaign=share&utm_content=web#c=1.a",
+    );
+    expect(shareFromHash(new URL(url).hash)).toBe("1.a");
   });
 
   it("importKeyOf ignores the order", () => {
@@ -103,7 +108,7 @@ describe("Telegram start parameter", () => {
 
   it("roundtrips ids and quantities; quantity 1 is omitted", () => {
     const p = encodeStartParam(cartOf([A, 2], [B, 1]));
-    expect(p).toMatch(/^c1_[0-9a-f]{12}-2_[0-9a-f]{12}$/);
+    expect(p).toMatch(/^s_share-tg__c1_[0-9a-f]{12}-2_[0-9a-f]{12}$/);
     expect(p).toContain(`${B}`);
     expect(p).not.toContain(`${B}-1`);
     expect(decodeStartParam(p).sort((x, y) => x.offerId.localeCompare(y.offerId))).toEqual(
@@ -132,15 +137,26 @@ describe("Telegram start parameter", () => {
     expect(encodeStartParam(EMPTY_CART)).toBeNull();
   });
 
-  it("the 512-char limit: 39 plain lines fit, 40 do not", () => {
+  it("the 512-char limit includes the share prefix: 38 plain lines fit, 39 do not", () => {
     expect(START_PARAM_MAX).toBe(512);
-    const ok = encodeStartParam(lines(39));
+    const ok = encodeStartParam(lines(38));
     expect(ok).not.toBeNull();
     expect(ok?.length).toBeLessThanOrEqual(512);
-    expect(encodeStartParam(lines(40))).toBeNull();
+    expect(encodeStartParam(lines(39))).toBeNull();
     // with quantities each line is longer
-    expect(encodeStartParam(lines(34, 2))).not.toBeNull();
-    expect(encodeStartParam(lines(35, 2))).toBeNull();
+    expect(encodeStartParam(lines(33, 2))).not.toBeNull();
+    expect(encodeStartParam(lines(34, 2))).toBeNull();
+  });
+
+  it("carries the share label and parses both the labelled and the old bare form", () => {
+    const p = encodeStartParam(cartOf([A, 2]));
+    expect(p?.startsWith(SHARE_TG_PREFIX)).toBe(true);
+    expect(SHARE_TG_PREFIX).toBe("s_share-tg__");
+    expect(decodeStartParam(`s_share-tg__c1_${A}-2`)).toEqual([{ offerId: A, qty: 2 }]);
+    expect(decodeStartParam(`s_spring-fb__c1_${A}`)).toEqual([{ offerId: A, qty: 1 }]);
+    expect(decodeStartParam(`c1_${A}-2`)).toEqual([{ offerId: A, qty: 2 }]); // old link
+    expect(decodeStartParam("s_share-tg")).toEqual([]); // label only: no cart
+    expect(decodeStartParam(`s_share-tg__x_${A}`)).toEqual([]);
   });
 
   it("builds the t.me link", () => {

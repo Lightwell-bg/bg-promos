@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bg_promos.analytics.attribution import (
-    UNKNOWN, Source, from_referrer, from_utm, parse_label, resolve_site_source, split_start_param,
+    LEGACY_SHARE, UNKNOWN, Source, from_referrer, from_utm, parse_label, resolve_site_source, split_start_param,
 )
 
 OWN = ("promos.centerai.eu",)
@@ -48,3 +48,13 @@ def test_split_start_param():
     # a cart-only param never yields a source
     assert parse_label(split_start_param("c1_abc")[0], "startapp") == UNKNOWN
     assert split_start_param("garbage") == (None, None)
+
+
+def test_share_label_with_cart():
+    label, cart = split_start_param("s_share-tg__c1_abc-2_def")
+    assert (label, cart) == ("s_share-tg", "c1_abc-2_def")
+    assert parse_label(label, "startapp") == Source("startapp", "telegram", "miniapp", "share", "tg")
+
+
+def test_legacy_share_source_constant():
+    assert LEGACY_SHARE == Source("startapp", "telegram", "miniapp", "share", "legacy")

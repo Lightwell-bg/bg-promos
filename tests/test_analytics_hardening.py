@@ -116,7 +116,8 @@ def test_migration_v1_to_v2_keeps_data(tmp_path):
     con.close()
     st2 = AnalyticsStore(path)
     with st2._ro() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+        assert conn.execute("SELECT source_inherited FROM sessions").fetchone()[0] == 0
         assert [r[0] for r in conn.execute("SELECT event_id FROM events")] == ["e1"]
         assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []

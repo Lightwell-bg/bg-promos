@@ -310,7 +310,7 @@ export async function getUsers(q: AdminQuery, search: string, page: number): Pro
 
 export interface UserCard {
   user: AdminUser;
-  sessions: { id: string; platform: string; startedAt: string | null; source: string | null; lang: string | null }[];
+  sessions: { id: string; platform: string; startedAt: string | null; source: string | null; inherited: boolean; lang: string | null }[];
   events: { ts: string | null; name: string; platform: string | null; props: string }[];
 }
 
@@ -335,6 +335,7 @@ export async function getUser(id: string): Promise<UserCard> {
         platform: str(o.platform) ?? "",
         startedAt: str(o.started_at),
         source: sourceLabel(o.source),
+        inherited: o.source_inherited === true,
         lang: str(o.lang),
       };
     }),

@@ -33,6 +33,7 @@
         "campaign": "autumn",
         "placement": null
       },
+      "source_inherited": false,
       "events": 1
     }
   ],

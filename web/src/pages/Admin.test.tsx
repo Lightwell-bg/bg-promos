@@ -38,6 +38,8 @@ const ANON_ID = userCardAnon.visitor_id;
 const UNKNOWN_SOURCE = { kind: "unknown", source: null, medium: null, campaign: null, placement: null };
 /** When true the anonymous visitor has no attributable source (backend: kind "unknown"). */
 let anonUnknown = false;
+/** When true the first session of the Telegram card carries an inherited source. */
+let inheritedSession = false;
 
 function users() {
   const d = structuredClone(USERS);
@@ -73,6 +75,7 @@ function handle(method: string, url: string, init?: RequestInit): Response {
     const card = structuredClone(CARDS[id]) as { first_source: unknown } | undefined;
     if (!card) return json(404);
     if (anonUnknown && id === ANON_ID) card.first_source = UNKNOWN_SOURCE;
+    if (inheritedSession) (card as unknown as { sessions: { source_inherited: boolean }[] }).sessions[0].source_inherited = true;
     return json(200, card);
   }
   if (method === "DELETE" && url.startsWith("/api/admin/users/")) return json(200, { ok: true });
@@ -82,6 +85,7 @@ function handle(method: string, url: string, init?: RequestInit): Response {
 beforeEach(() => {
   loggedIn = false;
   anonUnknown = false;
+  inheritedSession = false;
   metricsStatus = 200;
   loginStatus = 0;
   reqs = [];
@@ -308,6 +312,20 @@ describe("admin dashboard", () => {
 });
 
 describe("admin user card", () => {
+  it("marks an inherited session source with (унаследован), an own one without", async () => {
+    for (const inherited of [false, true]) {
+      inheritedSession = inherited;
+      await renderAdmin();
+      await login();
+      await userEvent.click(await screen.findByRole("button", { name: "4242" }));
+      await screen.findByRole("region", { name: "Профиль" });
+      const marked = screen.queryAllByText(/\(унаследован\)/);
+      expect(marked.length > 0).toBe(inherited);
+      cleanup();
+      loggedIn = false;
+    }
+  });
+
   it("an anonymous visitor is explicitly marked as unidentified", async () => {
     anonUnknown = true;
     await renderAdmin();

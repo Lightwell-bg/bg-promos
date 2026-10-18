@@ -275,9 +275,75 @@ def test_retention_purge(store):
     assert len(store.user_card(v)["events"]) == 1
 
 
+def _src_of(store, sid):
+    con = sqlite3.connect(store.path)
+    try:
+        return con.execute("SELECT source_id, source_inherited FROM sessions WHERE id=?", (sid,)).fetchone()
+    finally:
+        con.close()
+
+
+def test_inheritance_window_and_flag(store):
+    s = Seed(store)
+    camp, other, unk = s.source(kind="start", source="telegram", campaign="a"), \
+        s.source(kind="utm", source="x"), s.source()
+    v = s.tg_visitor(tg(9), unk, "2026-09-01T10:00:00Z")
+    s.session(v, "bot", "2026-09-01T10:00:00Z", camp)
+    s.session(v, "bot", "2026-09-02T10:00:00Z", other)
+    # exactly 30 days after the latest known session: inherits the most recent known one
+    sid = s.session(v, "miniapp", "2026-10-02T10:00:00Z", unk)
+    assert _src_of(store, sid) == (other, 1)
+    # 30 days + 1 second after the last known session: unknown, flag not set
+    v3 = s.tg_visitor(tg(11), unk, "2026-09-01T10:00:00Z")
+    s.session(v3, "bot", "2026-09-01T10:00:00Z", camp)
+    sid2 = s.session(v3, "miniapp", "2026-10-01T10:00:01Z", unk)
+    assert _src_of(store, sid2) == (unk, 0)
+    # an own label wins
+    sid3 = s.session(v, "miniapp", "2026-10-04T10:00:00Z", camp)
+    assert _src_of(store, sid3) == (camp, 0)
+    # a brand-new visitor has nothing to inherit
+    v2 = s.tg_visitor(tg(10), unk, "2026-10-04T10:00:00Z")
+    assert _src_of(store, s.session(v2, "bot", "2026-10-04T10:00:00Z", unk)) == (unk, 0)
+    # inherited sessions count under the inherited source in the metrics filter
+    m = store.metrics(date(2026, 10, 2), date(2026, 10, 2), source="x")
+    assert m["sessions"] == 1
+
+
+def test_inherited_session_does_not_extend_window(store):
+    s = Seed(store)
+    camp, unk = s.source(kind="start", source="telegram", campaign="a"), s.source()
+    v = s.tg_visitor(tg(20), unk, "2026-09-01T10:00:00Z")
+    s.session(v, "bot", "2026-09-01T10:00:00Z", camp)  # own label, day 0
+    d20 = s.session(v, "miniapp", "2026-09-21T10:00:00Z", unk)
+    d35 = s.session(v, "miniapp", "2026-10-06T10:00:00Z", unk)
+    assert _src_of(store, d20) == (camp, 1)
+    assert _src_of(store, d35) == (unk, 0)
+
+
+def test_migration_v2_to_v3_in_place(tmp_path):
+    path = tmp_path / "v2.sqlite3"
+    AnalyticsStore(path)
+    con = sqlite3.connect(path)
+    con.execute("ALTER TABLE sessions DROP COLUMN source_inherited")
+    con.execute("PRAGMA user_version = 2")
+    con.execute("INSERT INTO sources(id, kind) VALUES (1, 'unknown')")
+    con.execute("INSERT INTO visitors(id, kind, anon_key, first_seen, last_seen, first_source_id) "
+                "VALUES ('v_a', 'anon', 'k', 't', 't', 1)")
+    con.execute("INSERT INTO sessions(id, visitor_id, platform, started_at, last_at, source_id) "
+                "VALUES ('s1', 'v_a', 'web', 't', 't', 1)")
+    con.commit()
+    con.close()
+    st = AnalyticsStore(path)
+    AnalyticsStore(path)  # idempotent
+    con = sqlite3.connect(st.path)
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert con.execute("SELECT source_inherited FROM sessions WHERE id='s1'").fetchone()[0] == 0
+    con.close()
+
+
 def test_schema_version_and_wal(store):
     con = sqlite3.connect(store.path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 3
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     con.close()
     AnalyticsStore(store.path)  # re-open: migration is a no-op

@@ -95,6 +95,8 @@ function sdkInitData(): string | null {
   return typeof v === "string" && v ? v : null;
 }
 
+const LEGACY_IMPORT_PATH = /^(?:\/[^/]+)?\/cart\/import\/?$/;
+
 /**
  * Reads the launch parameters once (call it before rendering). Reading is not tracking: nothing is
  * sent or stored except the manual `?bgtest=1` test flag.
@@ -106,10 +108,15 @@ export function captureLaunch(): Launch {
   const flag = sp.get("bgtest");
   if (flag === "1") localKv.set(TEST_KEY, true);
   else if (flag === "0") localKv.remove(TEST_KEY);
+  let utm = parseUtm(search);
+  // Old shared web links (no labels) land on the import page without any utm: tag them as legacy shares.
+  if (!Object.keys(utm).length && LEGACY_IMPORT_PATH.test(window.location.pathname)) {
+    utm = { utm_source: "share", utm_campaign: "share", utm_content: "legacy" };
+  }
   launch = {
     initData: parseInitData(hash) ?? sdkInitData(),
     startLabel: startLabel(parseStartParam(search, hash)),
-    utm: parseUtm(search),
+    utm,
     referrer: referrerOrigin(document.referrer, window.location.hostname),
     test: localKv.get<boolean>(TEST_KEY) === true,
   };

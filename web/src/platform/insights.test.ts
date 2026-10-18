@@ -106,6 +106,38 @@ describe("insights: session", () => {
     expect(body).not.toHaveProperty("test");
   });
 
+  it("web share link: the utm in the query is sent as-is", async () => {
+    const f = installFetch();
+    setLocation("/bg/cart/import?utm_source=share&utm_medium=cart&utm_campaign=share&utm_content=web#c=1.abc");
+    startInsights("bg");
+    await tick();
+    expect(f.sessions()[0].body.utm).toEqual({
+      utm_source: "share", utm_medium: "cart", utm_campaign: "share", utm_content: "web",
+    });
+  });
+
+  it("old unlabeled cart/import link is tagged as a legacy share; other pages and real utm are untouched", async () => {
+    let f = installFetch();
+    setLocation("/bg/cart/import#c=1.abc");
+    startInsights("bg");
+    await tick();
+    expect(f.sessions()[0].body.utm).toEqual({ utm_source: "share", utm_campaign: "share", utm_content: "legacy" });
+
+    resetInsightsForTests();
+    f = installFetch();
+    setLocation("/bg/cart/import?utm_source=fb#c=1.abc");
+    startInsights("bg");
+    await tick();
+    expect(f.sessions()[0].body.utm).toEqual({ utm_source: "fb" });
+
+    resetInsightsForTests();
+    f = installFetch();
+    setLocation("/bg/cart");
+    startInsights("bg");
+    await tick();
+    expect(f.sessions()[0].body.utm).toEqual({});
+  });
+
   it("creates the anonymous id only after start and reuses it", async () => {
     installFetch();
     expect(localStorage.getItem(AID_KEY)).toBeNull();

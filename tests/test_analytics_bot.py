@@ -78,6 +78,25 @@ def test_start_payload_kinds(store):
     assert kinds == sorted([('{"payload_kind":"none"}', "unknown")] * 2 + [('{"payload_kind":"other"}', "unknown")])
 
 
+def test_bot_start_without_payload_inherits_source(store):
+    from bg_promos.analytics.telegram import TelegramUser
+    from bg_promos.bot.analytics import record_bot_start
+
+    user = TelegramUser(4242, "ann_lee", "Ann", None, "ru", False)
+    record_bot_start(store, user, "s_spring-fb", now=START)
+    vid = record_bot_start(store, user, None, now=START + timedelta(days=3))
+    con = sqlite3.connect(store.path)
+    try:
+        rows = con.execute("SELECT src.kind, src.campaign, s.source_inherited FROM sessions s "
+                           "JOIN sources src ON src.id = s.source_id ORDER BY s.started_at").fetchall()
+        payload = con.execute("SELECT props FROM events WHERE name='bot_start' ORDER BY ts DESC LIMIT 1").fetchone()[0]
+    finally:
+        con.close()
+    assert rows == [("start", "spring", 0), ("start", "spring", 1)]
+    assert '"payload_kind":"none"' in payload
+    assert store.user_card(vid)["sessions"][0]["source_inherited"] is True
+
+
 def test_start_twice_is_two_sessions_one_visitor(store):
     for _ in range(2):
         run(handlers.cmd_start(message(tg_user()), CommandObject(command="start", args="s_a")))

@@ -66,6 +66,14 @@ describe("Telegram start parameter intake", () => {
     expect(window.location.search).toBe("?x=1");
   });
 
+  it("a labelled share link s_share-tg__c1_… imports the list; the old bare c1_… link still works", async () => {
+    window.history.replaceState(null, "", `/?tgWebAppStartParam=s_share-tg__${PARAM}`);
+    await renderApp();
+    await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/(bg|ru)\/cart$/));
+    expect(pairs(stored().carts[0])).toEqual([[A, 2], [B, 1]].sort());
+    expect(window.location.search).toBe("");
+  });
+
   it("works from the hash too and keeps the other hash parameters", async () => {
     window.history.replaceState(null, "", `/#tgWebAppData=abc%3D1&tgWebAppStartParam=${PARAM}&tgWebAppVersion=8`);
     await renderApp();

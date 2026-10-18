@@ -39,6 +39,9 @@ class Source:
 
 UNKNOWN = Source("unknown")
 
+# Old shared-cart links (bare startapp=c1_…) carried no label: tagged as campaign share / placement legacy.
+LEGACY_SHARE = Source("startapp", source="telegram", medium="miniapp", campaign="share", placement="legacy")
+
 
 def split_start_param(param: str | None) -> tuple[str | None, str | None]:
     """'s_x-y__c1_…' -> ('s_x-y', 'c1_…'); 'c1_…' -> (None, 'c1_…'); 's_x' -> ('s_x', None)."""

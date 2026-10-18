@@ -29,7 +29,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
-from ..analytics.attribution import UNKNOWN, parse_label, resolve_site_source, split_start_param
+from ..analytics.attribution import LEGACY_SHARE, UNKNOWN, parse_label, resolve_site_source, split_start_param
 from ..analytics.events import SERVER_ONLY, EventError, is_automated_ua, is_uuid, validate_event
 from ..analytics.store import AnalyticsStore, SessionGone
 from ..analytics.telegram import InitDataError, verify_init_data
@@ -261,6 +261,8 @@ class AnalyticsService:
                 raise HTTPException(401, "invalid init data") from None
             label, _cart = split_start_param(verified.start_param)
             source = parse_label(label, "startapp") if label else UNKNOWN
+            if not label and _cart:  # old unlabeled shared-cart link
+                source = LEGACY_SHARE
             source_id = store.get_or_create_source(source)
             visitor_id = store.upsert_tg_visitor(verified.user, source_id, now)
             open_event = "miniapp_open"

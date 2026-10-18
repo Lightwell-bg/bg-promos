@@ -33,6 +33,7 @@
         "campaign": "spring",
         "placement": null
       },
+      "source_inherited": false,
       "events": 2
     }
   ],

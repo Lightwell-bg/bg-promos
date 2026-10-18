@@ -123,6 +123,7 @@ npm run og         # пересоздать public/og-image.png
 | `admin_cookie_secure` | `true` | На сервере держать `true` (https); `false` только для локального http. Переопределение через окружение: `BG_PROMOS_ADMIN_COOKIE_SECURE=0` |
 
 - **Project ID Clarity**: https://clarity.microsoft.com -> New project (Website `https://promos.centerai.eu`) -> Settings -> Overview -> Project ID. Впишите его в `config.ini` `[web] clarity_id`, затем `docker compose up -d --force-recreate api web`. Документация: https://learn.microsoft.com/clarity/.
+- **Формат ссылок кампаний**: бот `https://t.me/promoseubot?start=s_<campaign>[-<placement>]`, Mini App `https://t.me/promoseubot?startapp=s_<campaign>[-<placement>]`, сайт `https://promos.centerai.eu/?utm_source=…&utm_campaign=…`. Ссылки на корзину помечаются автоматически (`share`); сессия без метки наследует последний известный источник посетителя за последние 30 дней (в `/admin` помечается «(унаследован)»). Подробности: [docs/ANALYTICS.md](docs/ANALYTICS.md).
 - **Секреты**: задайте `ANALYTICS_SECRET` и `ADMIN_PASSWORD` в `.env` (шаблон: `.env.example`).
 - **Админка**: `/admin` (например `https://promos.centerai.eu/admin`; на сайте нет ссылки, `noindex`). Введите `ADMIN_PASSWORD`; сессия длится 12 часов, 5 неверных паролей с одного IP блокируют вход на 15 минут. Локальные шаги: [docs/QUICK_START.md](docs/QUICK_START.md).
 
