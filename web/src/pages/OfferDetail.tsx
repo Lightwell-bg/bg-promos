@@ -14,7 +14,7 @@ import { validityLabel } from "../domain/dates";
 import { conditionChips, formatEUR } from "../domain/price";
 import { CHAIN_NAMES } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
-import { track } from "../platform/analytics";
+import { record, track } from "../platform/analytics";
 import { setTitle } from "../platform/document";
 import { currentUrl } from "../platform/env";
 import { isSafeExternalUrl, openExternal } from "../platform/openExternal";
@@ -45,7 +45,10 @@ export function OfferDetail() {
     if (offerName) setTitle(`${offerName} | ${t("app.name")}`);
   }, [offerName, t]);
   useEffect(() => {
-    if (offerId) track("view_offer", { chain: offerChain ?? "", category: offerCategory ?? "" });
+    if (!offerId) return;
+    track("view_offer", { chain: offerChain ?? "", category: offerCategory ?? "" });
+    // dedupeMs: StrictMode runs this effect twice in development; one view is one logical action.
+    record("offer_view", { offer_id: offerId, chain: offerChain ?? "", category: offerCategory ?? "" }, { dedupeMs: 1500 });
   }, [offerId, offerChain, offerCategory]);
 
   if (!catalog) {

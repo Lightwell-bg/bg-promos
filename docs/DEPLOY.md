@@ -56,6 +56,23 @@ ga4_id = G-XXXXXXXXXX
 
 Остальные ключи `[web]`, `[brochures]`, `[offers_urls]` уже заполнены в репозитории.
 
+### 2a. Внутренняя аналитика и /admin (новые переменные)
+
+Добавьте в `.env` на сервере (шаблон — `.env.example`; существующие значения не трогайте):
+
+```
+ANALYTICS_SECRET=<вывод команды ниже>
+ADMIN_PASSWORD=<ваш пароль для /admin>
+```
+
+Секрет генерируется так (один раз; при смене анонимные посетители начнут считаться новыми):
+
+```bash
+python -c "import secrets;print(secrets.token_hex(32))"
+```
+
+Пустой `ANALYTICS_SECRET` = случайный на каждый запуск (в логе предупреждение). Пустой `ADMIN_PASSWORD` = `/admin` выключен (API отвечает 404). В `config.ini [web]` появились `clarity_id` (пусто = Clarity выключен), `analytics_enabled = true`, `admin_cookie_secure = true`. Сервису `bot` теперь нужен том `./data:/app/data` (уже есть в `docker-compose.yml`): бот пишет `bot_start` в `data/analytics.sqlite3`. После обновления пересоздайте `api`, `web` и `bot`: `docker compose up -d --build --force-recreate api web bot`. Подробности — `docs/ANALYTICS.md`, раздел Operations.
+
 ## 3. Собрать и запустить api и web (на сервере)
 
 ```bash

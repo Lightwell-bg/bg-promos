@@ -110,6 +110,22 @@ New environment variables:
 - **Telegram Bot API** (error reports): open `@BotFather`, send `/newbot`, copy the token into `TELEGRAM_BOT_TOKEN`. Write to your bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` into `TELEGRAM_CHAT_ID`. Docs: https://core.telegram.org/bots/api. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 - **Google Analytics 4** (optional, consent only): create a property at https://analytics.google.com, add a Web data stream for `https://promos.centerai.eu`, copy the Measurement ID (`G-...`) into `config.ini` `[web] ga4_id`. Set data retention to 14 months and turn Google signals off. Nothing from Google is loaded before the visitor accepts. Docs: https://support.google.com/analytics/answer/9304153.
 
+### Internal analytics, Microsoft Clarity and `/admin`
+
+Full contract: [docs/ANALYTICS.md](docs/ANALYTICS.md). Internal analytics, Clarity and GA4 start only after the single analytics consent; the data is stored in `data/analytics.sqlite3`.
+
+`config.ini` section `[web]`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `clarity_id` | empty | Microsoft Clarity Project ID; empty = Clarity off |
+| `analytics_enabled` | `true` | `false` = the client sends nothing and the analytics API answers 404 |
+| `admin_cookie_secure` | `true` | Keep `true` on the server (https); `false` only for local http. Env override: `BG_PROMOS_ADMIN_COOKIE_SECURE=0` |
+
+- **Clarity Project ID**: https://clarity.microsoft.com -> New project (Website `https://promos.centerai.eu`) -> Settings -> Overview -> Project ID. Put it into `config.ini` `[web] clarity_id`, then `docker compose up -d --force-recreate api web`. Docs: https://learn.microsoft.com/clarity/.
+- **Secrets**: set `ANALYTICS_SECRET` and `ADMIN_PASSWORD` in `.env` (template: `.env.example`).
+- **Admin page**: `/admin` (for example `https://promos.centerai.eu/admin`; not linked from the site, `noindex`). Enter `ADMIN_PASSWORD`; the session lasts 12 hours, 5 wrong passwords per IP lock the login for 15 minutes. Local steps: [docs/QUICK_START.md](docs/QUICK_START.md).
+
 ## Virtual environment and installation
 
 Windows (Git Bash):
@@ -172,7 +188,10 @@ Environment variables (`.env`, template in `.env.example`):
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
 | `BG_PROMOS_CONFIG` | Optional path to `config.ini` (not in `.env.example`; set by the Docker image to `/app/config.ini`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Stage 2: Telegram bot for error reports (empty = form disabled) |
-| `PROMOS_BOT_TOKEN` | Public bot @promoseubot (empty = bot disabled, exit 0); never the same as `TELEGRAM_BOT_TOKEN` |
+| `PROMOS_BOT_TOKEN` | Public bot @promoseubot (empty = bot disabled, exit 0); never the same as `TELEGRAM_BOT_TOKEN`; also verifies Mini App initData for analytics |
+| `ANALYTICS_SECRET` | HMAC secret of analytics event tokens, anonymous-id hashing and the `/admin` cookie. Generate: `python -c "import secrets;print(secrets.token_hex(32))"`. Empty = random per process (tokens and admin sessions reset on every restart) |
+| `ADMIN_PASSWORD` | Password of `/admin`. Empty = admin disabled (`/api/admin/*` answers 404) |
+| `BG_PROMOS_ADMIN_COOKIE_SECURE` | Optional override of `config.ini [web] admin_cookie_secure` (`0` for local http); not in `.env.example` |
 
 ```bash
 cp .env.example .env

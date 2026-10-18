@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram.types import CallbackQuery, Message, Update
 
+from ..analytics.store import AnalyticsStore
 from ..config import load
 from . import keyboards, texts
+from .analytics import record_bot_start, telegram_user, update_key
 
 log = logging.getLogger(__name__)
 
@@ -20,9 +23,32 @@ def _webapp_url() -> str:
     return load().bot_webapp_url
 
 
+def _analytics_store() -> AnalyticsStore | None:
+    settings = load()
+    if not settings.analytics_enabled:
+        return None
+    return AnalyticsStore(settings.analytics_db_path, settings.timezone)
+
+
+def _record_start(user, payload: str | None, key: str | None = None) -> None:
+    """Blocking part of the analytics write (run in a thread)."""
+    tg_user = telegram_user(user)
+    store = _analytics_store() if tg_user else None
+    if tg_user and store:
+        record_bot_start(store, tg_user, payload, key=key)
+
+
 @router.message(CommandStart(), F.chat.type == "private")
-async def cmd_start(message: Message) -> None:
+async def cmd_start(message: Message, command: CommandObject | None = None,
+                    event_update: Update | None = None) -> None:
     await message.answer(texts.START, reply_markup=keyboards.start_keyboard(_webapp_url()))
+    try:  # analytics must never break the reply; log the error class only
+        payload = command.args if command is not None and isinstance(command.args, str) else None
+        key = update_key(getattr(event_update, "update_id", None), getattr(message.chat, "id", None),
+                         getattr(message, "message_id", None))
+        await asyncio.to_thread(_record_start, message.from_user, payload, key)
+    except Exception as exc:
+        log.warning("analytics bot_start failed: %s", type(exc).__name__)
 
 
 @router.message(Command("app"), F.chat.type == "private")
@@ -37,7 +63,7 @@ async def cmd_install(message: Message) -> None:
 
 @router.message(Command("help"), F.chat.type == "private")
 async def cmd_help(message: Message) -> None:
-    await message.answer(texts.HELP, reply_markup=keyboards.open_keyboard(_webapp_url()))
+    await message.answer(texts.help_text(_webapp_url()),reply_markup=keyboards.open_keyboard(_webapp_url()))
 
 
 @router.callback_query(F.data.startswith("install:"))

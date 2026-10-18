@@ -110,6 +110,22 @@ npm run og         # пересоздать public/og-image.png
 - **Telegram Bot API** (сообщения об ошибках): откройте `@BotFather`, отправьте `/newbot`, токен впишите в `TELEGRAM_BOT_TOKEN`. Напишите своему боту, откройте `https://api.telegram.org/bot<TOKEN>/getUpdates` и скопируйте `chat.id` в `TELEGRAM_CHAT_ID`. Документация: https://core.telegram.org/bots/api. Пошагово: [docs/DEPLOY.md](docs/DEPLOY.md).
 - **Google Analytics 4** (необязательно, только с согласием): создайте свойство на https://analytics.google.com, добавьте поток Web для `https://promos.centerai.eu`, скопируйте Measurement ID (`G-...`) в `config.ini`, `[web] ga4_id`. Поставьте срок хранения данных 14 месяцев и отключите Google signals. До согласия посетителя ничего от Google не загружается. Документация: https://support.google.com/analytics/answer/9304153.
 
+### Внутренняя аналитика, Microsoft Clarity и `/admin`
+
+Полный контракт: [docs/ANALYTICS.md](docs/ANALYTICS.md). Внутренняя аналитика, Clarity и GA4 запускаются только после единого согласия на аналитику; данные хранятся в `data/analytics.sqlite3`.
+
+`config.ini`, секция `[web]`:
+
+| Ключ | По умолчанию | Значение |
+|---|---|---|
+| `clarity_id` | пусто | Project ID Microsoft Clarity; пусто = Clarity выключен |
+| `analytics_enabled` | `true` | `false` = клиент ничего не отправляет, API аналитики отвечает 404 |
+| `admin_cookie_secure` | `true` | На сервере держать `true` (https); `false` только для локального http. Переопределение через окружение: `BG_PROMOS_ADMIN_COOKIE_SECURE=0` |
+
+- **Project ID Clarity**: https://clarity.microsoft.com -> New project (Website `https://promos.centerai.eu`) -> Settings -> Overview -> Project ID. Впишите его в `config.ini` `[web] clarity_id`, затем `docker compose up -d --force-recreate api web`. Документация: https://learn.microsoft.com/clarity/.
+- **Секреты**: задайте `ANALYTICS_SECRET` и `ADMIN_PASSWORD` в `.env` (шаблон: `.env.example`).
+- **Админка**: `/admin` (например `https://promos.centerai.eu/admin`; на сайте нет ссылки, `noindex`). Введите `ADMIN_PASSWORD`; сессия длится 12 часов, 5 неверных паролей с одного IP блокируют вход на 15 минут. Локальные шаги: [docs/QUICK_START.md](docs/QUICK_START.md).
+
 ## Виртуальное окружение и установка
 
 Windows (Git Bash):
@@ -172,7 +188,10 @@ pip install -r requirements-dev.txt && pip install -e .
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (по умолчанию `INFO`) |
 | `BG_PROMOS_CONFIG` | Необязательный путь к `config.ini` (нет в `.env.example`; Docker-образ ставит `/app/config.ini`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Этап 2: Telegram-бот для сообщений об ошибках (пусто = форма отключена) |
-| `PROMOS_BOT_TOKEN` | Публичный бот @promoseubot (пусто = бот отключён, код выхода 0); никогда не совпадает с `TELEGRAM_BOT_TOKEN` |
+| `PROMOS_BOT_TOKEN` | Публичный бот @promoseubot (пусто = бот отключён, код выхода 0); никогда не совпадает с `TELEGRAM_BOT_TOKEN`; также проверяет initData Mini App для аналитики |
+| `ANALYTICS_SECRET` | HMAC-секрет токенов событий аналитики, хеширования анонимного id и cookie `/admin`. Генерация: `python -c "import secrets;print(secrets.token_hex(32))"`. Пусто = случайный на процесс (токены и сессии админки сбрасываются при каждом перезапуске) |
+| `ADMIN_PASSWORD` | Пароль `/admin`. Пусто = админка отключена (`/api/admin/*` отвечает 404) |
+| `BG_PROMOS_ADMIN_COOKIE_SECURE` | Необязательное переопределение `config.ini [web] admin_cookie_secure` (`0` для локального http); в `.env.example` нет |
 
 ```bash
 cp .env.example .env

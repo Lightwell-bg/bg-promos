@@ -95,6 +95,8 @@ for a cheap freshness check.
 ```json
 {
   "ga4_id": "G-XXXXXXX or null",
+  "clarity_id": "Microsoft Clarity project id or null (config.ini [web] clarity_id)",
+  "analytics_enabled": true,
   "contact_email": "info@centerai.eu",
   "operator": "CenterAI",
   "site_url": "https://promos.centerai.eu",
@@ -113,6 +115,66 @@ or Telegram unavailable. Anti-spam: honeypot, `elapsed_ms ≥ 3000`, per-IP 5/ho
 20/day, global 100/day, in-memory. Client IP = `X-Forwarded-For` first hop only when the
 direct peer is 127.0.0.1 / the Docker gateway, else the peer address. The message is sent
 to Telegram as plain text (no parse_mode).
+
+## Internal analytics (public)
+Contract and event whitelist: `docs/ANALYTICS.md`. Both endpoints answer `404` when
+`config.ini [web] analytics_enabled = false`. Body limit 32 KB (`413`, checked on
+Content-Length and on the actual bytes); rate limits in memory (per IP 600 requests/min,
+per session 120 requests/min) -> `429`. Invalid JSON/shape -> `400`.
+
+### POST /api/v1/analytics/session
+Request: `{"session_id": uuid, "platform": "web"|"miniapp", "anon_id": uuid (web), "init_data": str (miniapp),
+"lang": str?, "utm": {utm_source, utm_medium, utm_campaign, utm_content}?, "referrer": str?, "start_param": ignored, "test": bool?}`.
+- Mini App: `init_data` is verified with `PROMOS_BOT_TOKEN`; failure -> `401` (nothing is logged except the error class).
+  Identity and `start_param` come ONLY from the verified data (`s_<campaign>[-<placement>]` or `s_…__c1_…`).
+- Web: `anon_id` is hashed `sha256(ANALYTICS_SECRET + anon_id)`; source = UTM, else external referrer, else unknown.
+- Idempotent on `session_id`; a session id owned by another visitor -> `409`.
+- User agents of headless browsers/bots/previews set `is_automated`; `test: true` sets `is_test`.
+
+Response `200`: `{"token": str, "visitor_id": "v_…"}` (`token` = HMAC of session|visitor; send it with every event batch).
+With an empty `ANALYTICS_SECRET` the secret is random per process, so after an API restart `events` answers `401`
+and the client must call `session` again (same `session_id`) to get a new token.
+
+### POST /api/v1/analytics/events
+Request: `{"token": str, "session_id": uuid, "events": [{"event_id": uuid, "name": str, "ts": ISO 8601, "props": {}}]}`, at most 50 events.
+Unknown names/props, wrong types, `ts` more than 2 days from server time and the server-only names
+(`bot_start`, `site_open`, `miniapp_open`) are rejected per event; the rest of the batch is stored.
+Response: `200 {"accepted": n, "duplicates": n, "rejected": [{"index": i, "error": str}]}`;
+`400` when more than 50 events or when every event was rejected (same body); `401` bad token / unknown session.
+Duplicate `event_id` is ignored (idempotent re-send).
+
+## Admin API (closed, same-origin only)
+Enabled only when `ADMIN_PASSWORD` is set; otherwise every `/api/admin/*` answers `404`. All responses
+carry `Cache-Control: no-store`. Auth is the cookie `bgp_admin` (HMAC-signed expiry, 12 h, HttpOnly,
+SameSite=Strict, Path=/api/admin, Secure unless `config.ini [web] admin_cookie_secure = false`);
+without it `401`. CORS does not allow credentials and these paths are not meant for cross-origin use.
+
+- `POST /api/admin/login` `{"password": str}` -> `200 {"ok": true}` + cookie; `401` wrong password;
+  `429` after 5 failed attempts per IP in 15 minutes.
+- `POST /api/admin/logout` -> `200`, cookie deleted.
+- `GET /api/admin/metrics` query: `from`, `to` (Sofia dates `YYYY-MM-DD`, default last 7 days; max 400 days),
+  `platform` (web|miniapp|bot), `lang`, `source_kind` (utm|start|startapp|referrer|unknown), `source`, `campaign`,
+  `include_test`, `include_automated` (default false = excluded). Response:
+  ```json
+  {"period": {"from": "2026-10-12", "to": "2026-10-18"},
+   "users": {"total": 0, "tg": 0, "anon": 0}, "sessions": 0,
+   "bot_starts": 0, "miniapp_opens": 0, "site_opens": 0, "catalog_loads": 0,
+   "cart_add_users": 0, "share_links": 0, "imports_successful": 0, "returning_visitors": 0,
+   "top_offers": {"viewed": [{"offer_id": "", "chain": "", "category": "", "count": 0}], "carted": []},
+   "zero_result_queries": [{"query": "", "count": 0}],
+   "errors": [{"name": "", "where": "", "count": 0}]}
+  ```
+  Offer names are not stored (the analytics DB is separate from the catalog): the UI resolves `offer_id` from the public catalog.
+- `GET /api/admin/users` the same filters plus `q` (Telegram id, @username, first/last name or `v_…` id), `limit` (1..200, default 50),
+  `offset`. Response `{"total", "limit", "offset", "items": [{"visitor_id", "kind": "tg"|"anon", "tg_id", "username",
+  "first_name", "last_name", "language", "first_seen", "last_seen", "first_source": {kind, source, medium, campaign, placement},
+  "sessions", "cart_adds"}]}`; `sessions`/`cart_adds` are counted inside the selected period and filters.
+- `GET /api/admin/users/{visitor_id}` -> profile (`is_anonymous` true for site visitors, no Telegram fields),
+  `sessions` (newest first, with source, flags and event count) and `events` (timeline, newest first, max 500); `404` unknown.
+- `DELETE /api/admin/users/{visitor_id}` -> deletes the visitor, sessions and events; `404` unknown.
+- `GET /api/admin/filters` -> `{"platforms", "langs", "source_kinds", "sources", "campaigns"}`.
+
+Timestamps in analytics responses are UTC (`...Z`).
 
 ## CORS
 Allowed origins from `config.ini [web] cors_origins` (default: the site URL,

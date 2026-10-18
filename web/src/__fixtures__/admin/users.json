@@ -1,0 +1,47 @@
+{
+  "total": 2,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "visitor_id": "v_tg0000000000000001",
+      "kind": "tg",
+      "tg_id": 4242,
+      "username": "ann_lee",
+      "first_name": "Ann",
+      "last_name": "Lee",
+      "language": "ru",
+      "first_seen": "2026-10-18T12:00:00Z",
+      "last_seen": "2026-10-18T12:00:00Z",
+      "first_source": {
+        "kind": "startapp",
+        "source": "telegram",
+        "medium": "miniapp",
+        "campaign": "spring",
+        "placement": null
+      },
+      "sessions": 1,
+      "cart_adds": 1
+    },
+    {
+      "visitor_id": "v_anon000000000000002",
+      "kind": "anon",
+      "tg_id": null,
+      "username": null,
+      "first_name": null,
+      "last_name": null,
+      "language": null,
+      "first_seen": "2026-10-18T12:00:00Z",
+      "last_seen": "2026-10-18T12:00:00Z",
+      "first_source": {
+        "kind": "utm",
+        "source": "ig",
+        "medium": null,
+        "campaign": "autumn",
+        "placement": null
+      },
+      "sessions": 1,
+      "cart_adds": 0
+    }
+  ]
+}

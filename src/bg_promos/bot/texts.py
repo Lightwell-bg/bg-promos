@@ -30,17 +30,22 @@ CART_NOTE = (
     "используйте кнопку «Поделиться» в корзине."
 )
 
-HELP = (
-    "<b>BG Promos</b> — акции Lidl, Kaufland и BILLA в одном приложении.\n\n"
-    "Что умеет приложение: поиск и фильтры по акциям, корзина с суммами по магазинам, "
-    "отправка корзины ссылкой.\n\n"
-    + CART_NOTE
-    + "\n\n<b>Команды</b>\n"
-    "/start — начать\n"
-    "/app — открыть приложение\n"
-    "/install — установка на телефон\n"
-    "/help — справка"
-)
+def help_text(url: str) -> str:
+    """Help text; the privacy link is built from the configured webapp URL."""
+    privacy = escape(url.rstrip("/") + "/ru/legal/privacy")
+    return (
+        "<b>BG Promos</b> — акции Lidl, Kaufland и BILLA в одном приложении.\n\n"
+        "Что умеет приложение: поиск и фильтры по акциям, корзина с суммами по магазинам, "
+        "отправка корзины ссылкой.\n\n"
+        + CART_NOTE
+        + "\n\n<b>Команды</b>\n"
+        "/start — начать\n"
+        "/app — открыть приложение\n"
+        "/install — установка на телефон\n"
+        "/help — справка\n\n"
+        "ℹ️ При /start бот сохраняет ваш Telegram ID, имя и источник перехода для "
+        f"статистики. Подробнее: {privacy}"
+    )
 
 
 def install_ios(url: str) -> str:

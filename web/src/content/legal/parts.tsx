@@ -5,7 +5,7 @@ import styles from "./legal.module.css";
 export const OPERATOR = "CenterAI";
 export const CONTACT_EMAIL = "info@centerai.eu";
 export const SITE_URL = "https://promos.centerai.eu";
-export const UPDATED = "17.10.2026";
+export const UPDATED = "18.10.2026";
 export const CPDP_URL = "https://www.cpdp.bg";
 
 /** Wrapper for a legal document: title, "last updated" line, body. */

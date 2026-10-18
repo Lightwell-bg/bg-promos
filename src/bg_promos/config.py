@@ -64,6 +64,16 @@ class Settings:
     promos_bot_token: str = ""
     bot_webapp_url: str = "https://promos.centerai.eu"
     bot_username: str = ""
+    # ---- internal analytics (docs/ANALYTICS.md) ----
+    clarity_id: str = ""
+    analytics_enabled: bool = True
+    admin_cookie_secure: bool = True
+    analytics_secret: str = ""
+    admin_password: str = ""
+
+    @property
+    def analytics_db_path(self) -> Path:
+        return self.data_dir / "analytics.sqlite3"
 
     @property
     def tz(self) -> ZoneInfo:
@@ -137,6 +147,14 @@ def load(path: str | os.PathLike[str] | None = None) -> Settings:
         site_url=web_str("site_url", defaults.site_url),
         cors_origins=web_list("cors_origins", defaults.cors_origins),
         ga4_id=web_str("ga4_id", ""),
+        clarity_id=web_str("clarity_id", ""),
+        analytics_enabled=web_str("analytics_enabled", "true").lower() not in ("false", "0", "no", "off"),
+        # BG_PROMOS_ADMIN_COOKIE_SECURE=0 overrides config.ini (local http runs only)
+        admin_cookie_secure=(
+            os.environ.get("BG_PROMOS_ADMIN_COOKIE_SECURE") or web_str("admin_cookie_secure", "true")
+        ).strip().lower() not in ("false", "0", "no", "off"),
+        analytics_secret=(os.environ.get("ANALYTICS_SECRET") or "").strip(),
+        admin_password=os.environ.get("ADMIN_PASSWORD") or "",
         contact_email=web_str("contact_email", defaults.contact_email),
         operator=web_str("operator", defaults.operator),
         report_hourly_per_ip=web_int("report_hourly_per_ip", defaults.report_hourly_per_ip),

@@ -64,6 +64,21 @@
    pytest -q
    ```
 
+Локальный вход в админку `/admin` (статистика; нужны шаги 1-3 этапа 2; полный контракт: [ANALYTICS.md](ANALYTICS.md)):
+
+1. Задать секреты в `.env` (значения не публиковать): `ANALYTICS_SECRET` (`python -c "import secrets;print(secrets.token_hex(32))"`) и `ADMIN_PASSWORD`.
+2. Перезапустить API с отключённым флагом Secure у cookie (локальный http), venv активировано:
+   ```bash
+   BG_PROMOS_ADMIN_COOKIE_SECURE=0 python -m uvicorn bg_promos.web.app:app --port 8001
+   ```
+3. Запустить фронтенд (`cd web && npm run dev`) и открыть http://localhost:5173/admin, ввести `ADMIN_PASSWORD`.
+4. Данные появятся после согласия на аналитику на сайте (баннер) и нескольких действий; проверка API без браузера:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8001/api/admin/metrics
+   ```
+   Ожидаемый ответ без входа: `401` (`404` = `ADMIN_PASSWORD` пуст).
+5. Файл данных аналитики: `data/analytics.sqlite3` (в `.gitignore`).
+
 Выкатка этапа 2 на сервер: [DEPLOY.md](DEPLOY.md). Упаковка в магазины приложений: [MOBILE_STORES.md](MOBILE_STORES.md).
 
 Вариант Docker на VPS (Ubuntu, Docker уже установлен):

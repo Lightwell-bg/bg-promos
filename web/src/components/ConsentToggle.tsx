@@ -5,13 +5,16 @@ import { analyticsAvailable } from "./AnalyticsGate";
 import styles from "./ConsentBanner.module.css";
 import toggle from "./ConsentToggle.module.css";
 
-/** Cookies page: switch analytics on or off. Revoking stops tracking and removes _ga cookies. */
+/**
+ * Cookies page: switch analytics on or off. Revoking stops GA4, Clarity and the internal statistics,
+ * removes _ga cookies and forgets the anonymous id and the queued events.
+ */
 export function ConsentToggle() {
   const t = useT();
   const lang = useLang();
-  const { ga4_id } = useConfig();
+  const cfg = useConfig();
   const consent = useConsent();
-  if (!analyticsAvailable(ga4_id)) {
+  if (!analyticsAvailable(cfg)) {
     return <p className={toggle.note}>{t("consent.unavailable")}</p>;
   }
   const on = consent?.choice === "granted";

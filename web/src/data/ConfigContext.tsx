@@ -5,6 +5,8 @@ import { fetchConfig } from "./api";
 
 export const FALLBACK_CONFIG: AppConfig = {
   ga4_id: null,
+  clarity_id: null,
+  analytics_enabled: false,
   contact_email: "info@centerai.eu",
   operator: "CenterAI",
   site_url: "",

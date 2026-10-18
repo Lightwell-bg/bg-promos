@@ -95,4 +95,9 @@ describe("prerender", () => {
     expect(robots).toContain("Disallow: /api/");
     expect(robots).toContain("Sitemap: https://promos.centerai.eu/sitemap.xml");
   });
+
+  it("the closed /admin section is neither prerendered nor in the sitemap", async () => {
+    expect(existsSync(path.join(dir, "admin"))).toBe(false);
+    expect(await read("sitemap.xml")).not.toContain("/admin");
+  });
 });

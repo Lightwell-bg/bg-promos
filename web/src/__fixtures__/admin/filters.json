@@ -1,0 +1,7 @@
+{
+  "platforms": ["miniapp", "web"],
+  "langs": ["bg", "ru"],
+  "source_kinds": ["startapp", "utm"],
+  "sources": ["ig", "telegram"],
+  "campaigns": ["autumn", "spring"]
+}

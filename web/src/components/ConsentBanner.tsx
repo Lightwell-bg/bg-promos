@@ -5,13 +5,17 @@ import { saveConsent, useConsent } from "../platform/consent";
 import { analyticsAvailable } from "./AnalyticsGate";
 import styles from "./ConsentBanner.module.css";
 
-/** Asks for analytics consent. Hidden when GA is not configured, in native shells, or once answered. */
+/**
+ * The single analytics consent (GA4, Microsoft Clarity and internal statistics). Hidden when no analytics
+ * is configured, in native shells, or once answered (the choice is stored for 12 months). In-page markup
+ * only - no window.confirm, so it works inside the Telegram Mini App webview.
+ */
 export function ConsentBanner() {
   const t = useT();
   const lang = useLang();
-  const { ga4_id } = useConfig();
+  const cfg = useConfig();
   const consent = useConsent();
-  if (!analyticsAvailable(ga4_id) || consent) return null;
+  if (!analyticsAvailable(cfg) || consent) return null;
   return (
     <section className={styles.banner} aria-label={t("consent.title")}>
       <p className={styles.text}>

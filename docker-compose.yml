@@ -42,6 +42,7 @@ services:
     env_file: .env
     entrypoint: ["python", "-m", "bg_promos.bot"]
     volumes:
+      - ./data:/app/data
       - ./config.ini:/app/config.ini:ro
     restart: on-failure
     logging:

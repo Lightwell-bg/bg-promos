@@ -1,0 +1,48 @@
+{
+  "visitor_id": "v_anon000000000000002",
+  "kind": "anon",
+  "is_anonymous": true,
+  "tg_id": null,
+  "username": null,
+  "first_name": null,
+  "last_name": null,
+  "language": null,
+  "first_seen": "2026-10-18T12:00:00Z",
+  "last_seen": "2026-10-18T12:00:00Z",
+  "first_source": {
+    "kind": "utm",
+    "source": "ig",
+    "medium": null,
+    "campaign": "autumn",
+    "placement": null
+  },
+  "is_test": false,
+  "sessions": [
+    {
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "platform": "web",
+      "started_at": "2026-10-18T12:00:00Z",
+      "last_at": "2026-10-18T12:00:00Z",
+      "lang": "bg",
+      "is_automated": false,
+      "is_test": false,
+      "source": {
+        "kind": "utm",
+        "source": "ig",
+        "medium": null,
+        "campaign": "autumn",
+        "placement": null
+      },
+      "events": 1
+    }
+  ],
+  "events": [
+    {
+      "ts": "2026-10-18T12:00:00Z",
+      "name": "site_open",
+      "platform": "web",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "props": {}
+    }
+  ]
+}

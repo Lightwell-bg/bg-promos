@@ -105,6 +105,10 @@ async def test_app_install_help():
     text = m.answer.await_args.args[0]
     assert "/start" in text and "/app" in text and "/install" in text and "/help" in text
     assert "отдельно" in text
+    assert text.endswith(
+        "ℹ️ При /start бот сохраняет ваш Telegram ID, имя и источник перехода для статистики. "
+        "Подробнее: https://promos.centerai.eu/ru/legal/privacy"
+    )
 
 
 @pytest.mark.parametrize(

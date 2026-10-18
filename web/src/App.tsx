@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { AnalyticsGate } from "./components/AnalyticsGate";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { AnalyticsGate, CatalogLoadedReporter } from "./components/AnalyticsGate";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CartProvider } from "./data/CartContext";
@@ -28,7 +28,9 @@ export function detectedLang(): Lang {
   return detectLang(prefs.get<string | null>("lang", null), browserLanguages());
 }
 
-const KNOWN_PAGES = new Set(["catalog", "search", "brochures", "cart", "offer", "legal", "c"]);
+const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
+
+const KNOWN_PAGES =new Set(["catalog", "search", "brochures", "cart", "offer", "legal", "c"]);
 
 /** Where a path with a missing or invalid language prefix should go (query kept by the caller). */
 export function redirectTarget(pathname: string, lang: Lang): string {
@@ -96,6 +98,15 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
+      {/* Closed stats section: outside the language prefix, noindex, not prerendered, not in navigation. */}
+      <Route
+        path="/admin/*"
+        element={
+          <Suspense fallback={null}>
+            <Admin />
+          </Suspense>
+        }
+      />
       <Route path="/:lang" element={<LangLayout />}>
         <Route index element={<Home />} />
         <Route path="catalog" element={<Catalog />} />
@@ -125,6 +136,7 @@ export function App() {
         <CatalogProvider>
           <CartProvider>
             <AnalyticsGate />
+            <CatalogLoadedReporter />
             <NavDepthProvider>
               <ErrorBoundary>
                 <StartParamGate>

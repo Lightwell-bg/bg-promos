@@ -1,0 +1,55 @@
+{
+  "visitor_id": "v_tg0000000000000001",
+  "kind": "tg",
+  "is_anonymous": false,
+  "tg_id": 4242,
+  "username": "ann_lee",
+  "first_name": "Ann",
+  "last_name": "Lee",
+  "language": "ru",
+  "first_seen": "2026-10-18T12:00:00Z",
+  "last_seen": "2026-10-18T12:00:00Z",
+  "first_source": {
+    "kind": "startapp",
+    "source": "telegram",
+    "medium": "miniapp",
+    "campaign": "spring",
+    "placement": null
+  },
+  "is_test": false,
+  "sessions": [
+    {
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "platform": "miniapp",
+      "started_at": "2026-10-18T12:00:00Z",
+      "last_at": "2026-10-18T12:00:00Z",
+      "lang": "ru",
+      "is_automated": false,
+      "is_test": false,
+      "source": {
+        "kind": "startapp",
+        "source": "telegram",
+        "medium": "miniapp",
+        "campaign": "spring",
+        "placement": null
+      },
+      "events": 2
+    }
+  ],
+  "events": [
+    {
+      "ts": "2026-10-18T12:00:00Z",
+      "name": "cart_add",
+      "platform": "miniapp",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "props": { "offer_id": "a1b2c3d4e5f1", "chain": "lidl", "category": "dairy" }
+    },
+    {
+      "ts": "2026-10-18T12:00:00Z",
+      "name": "miniapp_open",
+      "platform": "miniapp",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "props": {}
+    }
+  ]
+}

@@ -11,7 +11,8 @@ import { activeFilterCount, filterOffers, SORT_KEYS, type Filters, type SortKey 
 import { buildSearchIndex, searchOffers } from "../domain/search";
 import { useFilters } from "../hooks/useFilters";
 import { useLang, useT } from "../i18n/LangContext";
-import { track } from "../platform/analytics";
+import { changedKeys } from "../domain/insightEvents";
+import { record, track } from "../platform/analytics";
 import styles from "./Page.module.css";
 
 /**
@@ -69,6 +70,7 @@ export function Catalog() {
           onChange={(e) => {
             const sort = e.target.value as SortKey;
             track("sort_change", { sort });
+            if (sort !== filters.sort) record("filter_apply", { keys: ["sort"] });
             setFilters({ ...filters, sort });
           }}
         >
@@ -101,6 +103,8 @@ export function Catalog() {
           onApply={(f) => {
             // Counts only: filter values and the search text are never sent.
             track("filter_apply", { count: activeFilterCount(f) });
+            const keys = changedKeys(filters, f);
+            if (keys.length) record("filter_apply", { keys });
             setFilters(f);
             setSheet(false);
           }}

@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { isLang, translate } from "../i18n";
+import { reportAppError } from "../platform/analytics";
 import { getLang, reloadPage } from "../platform/document";
 import { session } from "../platform/session";
 import styles from "./ErrorBoundary.module.css";
@@ -46,6 +47,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, _info: ErrorInfo): void {
+    // Class name and place only: never the message or the stack.
+    reportAppError(error, "boundary");
     reloadOnceForChunkError(error);
   }
 

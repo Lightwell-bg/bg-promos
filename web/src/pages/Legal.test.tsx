@@ -27,7 +27,7 @@ describe("legal pages", () => {
     const { container } = renderLegal(lang, "privacy");
     await screen.findByRole("heading", { level: 1 });
     const text = container.textContent ?? "";
-    for (const needle of ["CenterAI", "info@centerai.eu", "17.10.2026", "https://www.cpdp.bg", "Telegram", "Google Ireland", "30", "14", "_ga"]) {
+    for (const needle of ["CenterAI", "info@centerai.eu", "18.10.2026","https://www.cpdp.bg", "Telegram", "Google Ireland", "30", "14", "_ga"]) {
       expect(text).toContain(needle);
     }
     expect(text).toContain(lang === "bg" ? "КЗЛД" : "КЗЛД");

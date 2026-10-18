@@ -37,3 +37,17 @@ describe("offer images", () => {
     expect(directive("img-src")).toContain(`https://${host}`);
   });
 });
+
+describe("Microsoft Clarity", () => {
+  it.each(["script-src", "connect-src", "img-src"])("%s allows clarity.ms and keeps the rest", (name) => {
+    const hosts = directive(name);
+    expect(hosts).toContain("https://www.clarity.ms");
+    expect(hosts).toContain("https://*.clarity.ms");
+    expect(hosts).toContain("'self'");
+  });
+
+  it("keeps GA4 allowed and object-src closed", () => {
+    expect(directive("script-src")).toContain("https://www.googletagmanager.com");
+    expect(directive("object-src")).toEqual(["'none'"]);
+  });
+});

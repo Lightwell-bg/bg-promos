@@ -90,6 +90,10 @@ export interface Catalog {
 
 export interface AppConfig {
   ga4_id: string | null;
+  /** Microsoft Clarity project id; empty/absent = Clarity disabled. */
+  clarity_id?: string | null;
+  /** Internal analytics (docs/ANALYTICS.md) on the server; absent (old server / cached config) = off. */
+  analytics_enabled?: boolean;
   contact_email: string;
   operator: string;
   site_url: string;

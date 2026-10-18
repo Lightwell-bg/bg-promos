@@ -18,6 +18,7 @@ import { useConfig } from "../data/ConfigContext";
 import { conditionChips, formatEUR, priceModel, unitKey } from "../domain/price";
 import { CHAIN_NAMES, type ChainId, type Offer } from "../domain/types";
 import { useLang, useT } from "../i18n/LangContext";
+import { record } from "../platform/analytics";
 import { setTitle } from "../platform/document";
 import { canNativeShare, copyText, share, telegramShareUrl } from "../platform/share";
 import styles from "./Cart.module.css";
@@ -110,10 +111,14 @@ export function Cart() {
     }
     setCopyNote(null);
     setShareOpen(true);
+    // Creating a link is not sending it. Counts only: no list contents, no names.
+    record("share_link_created", { lines: cart.state.lines.length, telegram: Boolean(config.telegram_bot && tgParam) });
   }
 
   async function onCopy(block: "tg" | "web", url: string) {
-    setCopyNote({ block, ok: await copyText(url) });
+    const ok = await copyText(url);
+    record("share_copy", { block, ok });
+    setCopyNote({ block, ok });
   }
 
   async function onSystemShare() {
@@ -126,7 +131,7 @@ export function Cart() {
     const title = t(block === "tg" ? "cart.shareBlockTelegram" : "cart.shareBlockWeb");
     const feedback = copyNote?.block === block ? copyNote : null;
     return (
-      <div className={styles.shareBlock} role="group" aria-label={title}>
+      <div className={styles.shareBlock} role="group" aria-label={title} data-clarity-mask="true">
         <p className={styles.shareBlockTitle}>{title}</p>
         <input
           className={styles.shareInput}
@@ -160,7 +165,7 @@ export function Cart() {
   }
 
   const sharePanel = links && (
-    <div className={styles.sharePanel} role="region" aria-label={t("cart.sharePanelTitle")}>
+    <div className={styles.sharePanel} role="region" aria-label={t("cart.sharePanelTitle")} data-clarity-mask="true">
       <p className={styles.sharePanelTitle}>{t("cart.sharePanelTitle")}</p>
       {links.tg && shareBlock("tg", links.tg)}
       {shareBlock("web", links.web)}
@@ -196,7 +201,7 @@ export function Cart() {
 
   const activeList = cart.lists.find((l) => l.active);
   const switcher = cart.lists.length >= 2 && activeList && (
-    <div className={styles.lists}>
+    <div className={styles.lists} data-clarity-mask="true">
       <div className={styles.chips} role="group" aria-label={t("cart.lists")}>
         {cart.lists.map((l) => (
           <button
@@ -295,7 +300,7 @@ export function Cart() {
         ? `${approx || total % line.qty !== 0 ? "≈ " : ""}${t("cart.perItem", { amount: formatEUR(Math.round(total / line.qty)), unit: t(unitKey(line.saleUnit)) })}`
         : null;
     return (
-      <li key={line.offerId} className={`${styles.line} ${ended ? styles.ended : ""}`}>
+      <li key={line.offerId} className={`${styles.line} ${ended ? styles.ended : ""}`} data-clarity-mask="true">
         <div className={styles.thumb}>
           <OfferImage src={line.imageUrl} alt="" icon={icons.get(line.category) ?? "🛒"} chain={line.chain} />
         </div>

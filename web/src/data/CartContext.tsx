@@ -9,6 +9,7 @@ import {
   gramsOf,
   isWeightLine,
   setGrams as setGramsFn,
+  WEIGHT_MIN,
   reconcile,
   removeLine,
   replaceLine,
@@ -33,7 +34,7 @@ import {
   type ImportResult,
 } from "../domain/carts";
 import type { ChainId, Offer } from "../domain/types";
-import { track } from "../platform/analytics";
+import { record, track } from "../platform/analytics";
 import { siteOrigin } from "../platform/env";
 import { localKv, type LocalKv } from "../platform/localKv";
 import { withLock } from "../platform/locks";
@@ -179,28 +180,55 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
   );
   const shownId = active.id;
 
+  /** The line on the list the user sees (latest known state), for analytics deltas. */
+  const lineOf = useCallback(
+    (offerId: string) => latest.current.carts.find((c) => c.id === shownId)?.cart.lines.find((l) => l.offerId === offerId),
+    [shownId],
+  );
   const add = useCallback(
     (offer: Offer) => {
       track("cart_add", { chain: offer.chain, category: offer.category });
+      record("cart_add", { offer_id: offer.id, chain: offer.chain, category: offer.category });
       actOn(shownId, (s) => addOffer(s, offer));
     },
     [actOn, shownId],
   );
   const setQty = useCallback(
-    (offerId: string, qty: number) => actOn(shownId, (s) => setQtyFn(s, offerId, qty)),
-    [actOn, shownId],
+    (offerId: string, qty: number) => {
+      const line = lineOf(offerId);
+      if (line) {
+        if (qty < 1) record("cart_remove", { offer_id: offerId, chain: line.chain, category: line.category });
+        else if (Math.round(qty) !== line.qty) {
+          record("cart_qty", { offer_id: offerId, chain: line.chain, delta: Math.round(qty) - line.qty, unit: "piece" });
+        }
+      }
+      actOn(shownId, (s) => setQtyFn(s, offerId, qty));
+    },
+    [actOn, shownId, lineOf],
   );
   const setGrams = useCallback(
-    (offerId: string, grams: number) => actOn(shownId, (s) => setGramsFn(s, offerId, grams)),
-    [actOn, shownId],
+    (offerId: string, grams: number) => {
+      const line = lineOf(offerId);
+      if (line && isWeightLine(line)) {
+        if (grams < WEIGHT_MIN) record("cart_remove", { offer_id: offerId, chain: line.chain, category: line.category });
+        else if (Math.round(grams) !== gramsOf(line)) {
+          record("cart_qty", { offer_id: offerId, chain: line.chain, delta: Math.round(grams) - gramsOf(line), unit: "g" });
+        }
+      }
+      actOn(shownId, (s) => setGramsFn(s, offerId, grams));
+    },
+    [actOn, shownId, lineOf],
   );
   const remove = useCallback(
     (offerId: string) => {
-      const line = latest.current.carts.find((c) => c.id === shownId)?.cart.lines.find((l) => l.offerId === offerId);
-      if (line) track("cart_remove", { chain: line.chain, category: line.category });
+      const line = lineOf(offerId);
+      if (line) {
+        track("cart_remove", { chain: line.chain, category: line.category });
+        record("cart_remove", { offer_id: offerId, chain: line.chain, category: line.category });
+      }
       actOn(shownId, (s) => removeLine(s, offerId));
     },
-    [actOn, shownId],
+    [actOn, shownId, lineOf],
   );
   const clear = useCallback(() => {
     track("cart_clear", {});
@@ -214,7 +242,10 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
     [actOn, shownId],
   );
   const setCard = useCallback(
-    (chain: ChainId, has: boolean) => actOn(shownId, (s) => setCardFn(s, chain, has)),
+    (chain: ChainId, has: boolean) => {
+      record("card_toggle", { chain, on: has });
+      actOn(shownId, (s) => setCardFn(s, chain, has));
+    },
     [actOn, shownId],
   );
   const acceptPrice = useCallback((offer: Offer) => actOn(shownId, (s) => acceptPriceFn(s, offer)), [actOn, shownId]);
@@ -263,6 +294,7 @@ export function CartProvider({ children, kv = localKv }: { children: ReactNode; 
         missing: 0,
       };
       track("cart_import", { mode: res.mode, added: res.added, missing: res.missing });
+      record("cart_import", { mode: res.mode, added: res.added, missing: res.missing });
       return res;
     },
     [act, catalog, today, kv],

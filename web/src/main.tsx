@@ -4,6 +4,7 @@ import { App } from "./App";
 import { recordVisit } from "./components/InstallHint";
 import { isNativeShell } from "./platform/env";
 import { initInstallPrompt } from "./platform/installPrompt";
+import { captureLaunch } from "./platform/insights";
 import { PREF_KEYS, prefs } from "./platform/prefs";
 import "./styles/tokens.css";
 import "./styles/global.css";
@@ -27,6 +28,13 @@ async function start() {
   await preloadPrefs();
   recordVisit();
   initInstallPrompt();
+  // Launch parameters (UTM, referrer, Telegram initData/start label) are read before the router rewrites
+  // the address bar. Reading sends nothing: analytics starts only after consent.
+  try {
+    captureLaunch();
+  } catch {
+    /* never block the app */
+  }
   // The prerendered #seo-static block is hidden and removed by <App> in a layout effect.
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>

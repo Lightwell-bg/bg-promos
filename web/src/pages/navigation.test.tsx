@@ -105,4 +105,23 @@ describe("search", () => {
     expect(screen.getByText(/Можете да пишете/)).toBeInTheDocument();
     expect(prefs.get<unknown>("recentQueries", [])).toEqual([]);
   });
+
+  it("?q= on entry is moved into router state and removed from the URL", async () => {
+    await renderApp("/bg/search?q=milka");
+    const input = await screen.findByRole("searchbox");
+    await waitFor(() => expect(where()).toBe("/bg/search"));
+    expect(input).toHaveValue("milka");
+    expect(document.querySelector('[data-clarity-mask="true"] [role="search"]')).not.toBeNull();
+  });
+
+  it("a committed search never appears in the URL; the results stay", async () => {
+    await renderApp("/bg/search");
+    const input = await screen.findByRole("searchbox");
+    await userEvent.type(input, "zzzqqq");
+    await userEvent.click(screen.getByRole("button", { name: "Търси" }));
+    await waitFor(() => expect(prefs.get<string[]>("recentQueries", [])).toEqual(["zzzqqq"]));
+    expect(where()).toBe("/bg/search");
+    expect(input).toHaveValue("zzzqqq");
+    expect(document.querySelector("[aria-live='polite']")).not.toBeNull();
+  });
 });
