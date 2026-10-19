@@ -112,6 +112,7 @@ export function createGoogleAnalytics(
     });
     const s = doc.createElement("script");
     s.async = true;
+    s.crossOrigin = "anonymous";
     s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
     doc.head.appendChild(s);
     loaded = true;

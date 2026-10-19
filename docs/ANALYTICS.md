@@ -111,6 +111,22 @@ path — owner decision 2026-10-18; both internal only, never sent to Clarity/GA
 - top offers (by `offer_view` and by `cart_add`), zero-result queries (count by query), errors
   (`app_error` grouped by name/where/message/source/file/line, with count, last seen and the latest
   stack and page path)
+- new users = active visitors whose `first_seen` is inside the period; returning users = active visitors first
+  seen before the period (`returning_visitors` above keeps its "2+ Sofia days ever" meaning)
+- errors carry `noise: bool` = name in {ScriptError, ResizeObserver} or `source = external`
+- Comparison (all with the same filters; test/automated excluded by default; every block is aggregate SQL):
+  - `previous` = the KPI object (no top lists/errors) of the previous period of equal length immediately before
+    (1 day -> the day before, 7 days -> the 7 days before); `previous_range: {from, to}`
+  - `series: {bucket: "hour"|"day", points[], previous_points[]}`; bucket = hour for a one-day period, else day;
+    point = `{t (ISO, Europe/Sofia start of the bucket), users, sessions, cart_users, bot_starts, miniapp_opens,
+    site_opens}`; empty buckets are included with zeros; a DST day has 23 or 25 hourly buckets;
+    `previous_points` has the same length (aligned by index, padded with zeros / truncated)
+  - `funnel: {current, previous}`, each `{opened, catalog_loaded, offer_view, cart_add, share_link_created}`:
+    distinct users per step (each counted independently, not nested)
+  - `sources[]` (max 50, users desc): `{kind, source, campaign, users, sessions, cart_users, new_users,
+    previous_users}`; `new_users` = first_seen in period and first source = this source; unknown traffic is one
+    row `kind "unknown"` with null source/campaign
+  - `platforms[]`: always web, miniapp, bot: `{platform, users, sessions, previous_users, previous_sessions}`
 - Never present cart sums as revenue or purchases.
 
 ## Clarity

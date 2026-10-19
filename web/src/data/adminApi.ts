@@ -133,10 +133,68 @@ export interface Kpi {
   shareLinks: number;
   importsOk: number;
   returning: number;
+  /** Visitors whose first_seen is inside the period / active ones that were first seen earlier. */
+  newUsers: number;
+  returningUsers: number;
+}
+
+export interface SeriesPoint {
+  /** ISO start of the bucket in Europe/Sofia (with offset). */
+  t: string;
+  users: number;
+  sessions: number;
+  cartUsers: number;
+  botStarts: number;
+  miniappOpens: number;
+  siteOpens: number;
+}
+
+export interface Series {
+  /** "hour" for a one-day period, otherwise "day". */
+  bucket: "hour" | "day";
+  points: SeriesPoint[];
+  /** Same length as `points`, aligned by index (padded with zeros / truncated on DST days). */
+  previousPoints: SeriesPoint[];
+}
+
+/** Distinct users per funnel step (each step counted independently). */
+export interface Funnel {
+  opened: number;
+  catalogLoaded: number;
+  offerView: number;
+  cartAdd: number;
+  shareLinkCreated: number;
+}
+
+export interface SourceRow {
+  kind: string;
+  source: string | null;
+  campaign: string | null;
+  users: number;
+  sessions: number;
+  cartUsers: number;
+  newUsers: number;
+  previousUsers: number;
+}
+
+export interface PlatformRow {
+  platform: string;
+  users: number;
+  sessions: number;
+  previousUsers: number;
+  previousSessions: number;
 }
 
 export interface Metrics {
   kpi: Kpi;
+  /** KPI of the previous period of equal length (same filters). */
+  previous: Kpi;
+  previousRange: { from: string; to: string };
+  series: Series;
+  funnel: Funnel;
+  previousFunnel: Funnel;
+  sources: SourceRow[];
+  platforms: PlatformRow[];
   topOffers: { offerId: string; chain: string | null; views: number; adds: number }[];
   zeroQueries: { query: string; count: number }[];
   errors: AdminError[];
@@ -155,6 +213,54 @@ export interface AdminError {
   lastSeen: string | null;
   stack: string | null;
   path: string | null;
+  /** Probably browser/extension noise (ScriptError, ResizeObserver, external scripts). */
+  noise: boolean;
+}
+
+function toKpi(d: Record<string, unknown>): Kpi {
+  const u = obj(d.users);
+  return {
+    users: num(u.total),
+    usersTg: num(u.tg),
+    usersAnon: num(u.anon),
+    sessions: num(d.sessions),
+    botStarts: num(d.bot_starts),
+    miniappOpens: num(d.miniapp_opens),
+    siteOpens: num(d.site_opens),
+    catalogLoads: num(d.catalog_loads),
+    cartAddUsers: num(d.cart_add_users),
+    shareLinks: num(d.share_links),
+    importsOk: num(d.imports_successful),
+    returning: num(d.returning_visitors),
+    newUsers: num(d.new_users),
+    returningUsers: num(d.returning_users),
+  };
+}
+
+function toPoints(v: unknown): SeriesPoint[] {
+  return arr(v).map((x) => {
+    const o = obj(x);
+    return {
+      t: str(o.t) ?? "",
+      users: num(o.users),
+      sessions: num(o.sessions),
+      cartUsers: num(o.cart_users),
+      botStarts: num(o.bot_starts),
+      miniappOpens: num(o.miniapp_opens),
+      siteOpens: num(o.site_opens),
+    };
+  });
+}
+
+function toFunnel(v: unknown): Funnel {
+  const o = obj(v);
+  return {
+    opened: num(o.opened),
+    catalogLoaded: num(o.catalog_loaded),
+    offerView: num(o.offer_view),
+    cartAdd: num(o.cart_add),
+    shareLinkCreated: num(o.share_link_created),
+  };
 }
 
 /** Merges the two backend top lists (viewed / carted, {offer_id, chain, category, count}) by offer. */
@@ -180,26 +286,50 @@ function mergeTop(d: Record<string, unknown>): Metrics["topOffers"] {
  * GET /api/admin/metrics?from&to&platform&lang&source_kind&source&campaign&include_test&include_automated.
  * Response: {period, users:{total,tg,anon}, sessions, bot_starts, miniapp_opens, site_opens,
  * catalog_loads, cart_add_users, share_links, imports_successful, returning_visitors,
- * top_offers:{viewed[],carted[]}, zero_result_queries[], errors[]}.
+ * new_users, returning_users, top_offers:{viewed[],carted[]}, zero_result_queries[], errors[] (with `noise`),
+ * previous (KPI object of the previous equal-length period), previous_range:{from,to},
+ * series:{bucket:"hour"|"day", points[], previous_points[]}, funnel:{current, previous},
+ * sources[], platforms[]}.
  */
 export async function getMetrics(q: AdminQuery): Promise<Metrics> {
   const d = obj(await request("GET", `/api/admin/metrics?${queryString(q)}`));
-  const u = obj(d.users);
+  const range = obj(d.previous_range);
+  const series = obj(d.series);
+  const funnel = obj(d.funnel);
   return {
-    kpi: {
-      users: num(u.total),
-      usersTg: num(u.tg),
-      usersAnon: num(u.anon),
-      sessions: num(d.sessions),
-      botStarts: num(d.bot_starts),
-      miniappOpens: num(d.miniapp_opens),
-      siteOpens: num(d.site_opens),
-      catalogLoads: num(d.catalog_loads),
-      cartAddUsers: num(d.cart_add_users),
-      shareLinks: num(d.share_links),
-      importsOk: num(d.imports_successful),
-      returning: num(d.returning_visitors),
+    kpi: toKpi(d),
+    previous: toKpi(obj(d.previous)),
+    previousRange: { from: str(range.from) ?? "", to: str(range.to) ?? "" },
+    series: {
+      bucket: series.bucket === "hour" ? "hour" : "day",
+      points: toPoints(series.points),
+      previousPoints: toPoints(series.previous_points),
     },
+    funnel: toFunnel(funnel.current),
+    previousFunnel: toFunnel(funnel.previous),
+    sources: arr(d.sources).map((x) => {
+      const o = obj(x);
+      return {
+        kind: str(o.kind) ?? "unknown",
+        source: str(o.source),
+        campaign: str(o.campaign),
+        users: num(o.users),
+        sessions: num(o.sessions),
+        cartUsers: num(o.cart_users),
+        newUsers: num(o.new_users),
+        previousUsers: num(o.previous_users),
+      };
+    }),
+    platforms: arr(d.platforms).map((x) => {
+      const o = obj(x);
+      return {
+        platform: str(o.platform) ?? "",
+        users: num(o.users),
+        sessions: num(o.sessions),
+        previousUsers: num(o.previous_users),
+        previousSessions: num(o.previous_sessions),
+      };
+    }),
     topOffers: mergeTop(obj(d.top_offers)),
     zeroQueries: arr(d.zero_result_queries).map((x) => {
       const o = obj(x);
@@ -219,6 +349,7 @@ export async function getMetrics(q: AdminQuery): Promise<Metrics> {
         lastSeen: str(o.last_seen),
         stack: str(o.stack),
         path: str(o.path),
+        noise: o.noise === true,
       };
     }),
   };

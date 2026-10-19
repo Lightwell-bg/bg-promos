@@ -28,6 +28,8 @@ let loginStatus = 0;
 // Mocked responses are the shared contract fixtures; tests/test_analytics_contract.py asserts
 // that the real backend responses have exactly these keys and types.
 const METRICS = metricsFixture;
+/** Response served for /api/admin/metrics (tests may swap it). */
+let metricsData: unknown = METRICS;
 const USERS = usersFixture;
 const CARDS: Record<string, unknown> = {
   [userCardTg.visitor_id]: userCardTg,
@@ -67,7 +69,7 @@ function handle(method: string, url: string, init?: RequestInit): Response {
   }
   if (!loggedIn) return json(401);
   if (url === "/api/admin/filters") return json(200, filtersFixture);
-  if (url.startsWith("/api/admin/metrics")) return metricsStatus === 200 ? json(200, METRICS) : json(metricsStatus);
+  if (url.startsWith("/api/admin/metrics")) return metricsStatus === 200 ? json(200, metricsData) : json(metricsStatus);
   if (url.startsWith("/api/admin/users?")) return json(200, users());
   if (method === "POST" && url === "/api/admin/users/search") return json(200, users());
   if (method === "GET" && url.startsWith("/api/admin/users/")) {
@@ -87,8 +89,10 @@ beforeEach(() => {
   anonUnknown = false;
   inheritedSession = false;
   metricsStatus = 200;
+  metricsData = METRICS;
   loginStatus = 0;
   reqs = [];
+  localStorage.clear();
   document.head.innerHTML = "";
   vi.stubGlobal(
     "fetch",
@@ -121,6 +125,10 @@ async function login() {
   await userEvent.type(await screen.findByLabelText("Пароль"), "secret");
   await userEvent.click(screen.getByRole("button", { name: "Войти" }));
   await screen.findByRole("region", { name: "Показатели" });
+}
+
+async function openFilters() {
+  await userEvent.click(screen.getByRole("button", { name: /^Фильтры/ }));
 }
 
 const lastMetricsParams = () => {
@@ -185,18 +193,18 @@ describe("admin dashboard", () => {
     const { container } = await renderAdmin();
     await login();
     const tiles = screen.getByRole("region", { name: "Показатели" });
+    await within(tiles).findByText("новые 2 · вернувшиеся 0");
     const tile = (label: string) => within(tiles).getByText(label).parentElement as HTMLElement;
     expect(tile("Пользователи")).toHaveTextContent("2");
-    expect(tile("Пользователи")).toHaveTextContent("Telegram: 1 · Анонимные: 1");
+    expect(tile("Пользователи")).toHaveTextContent("▲ 100% (было 1)");
     expect(tile("Сессии")).toHaveTextContent("2");
-    expect(tile("Запусков бота")).toHaveTextContent("0");
-    expect(tile("Открытий Mini App")).toHaveTextContent("1");
-    expect(tile("Открытий сайта")).toHaveTextContent("1");
-    expect(tile("Загрузок каталога")).toHaveTextContent("1");
+    expect(tile("Запуски бота")).toHaveTextContent("= (было 0)");
+    expect(tile("Открытия Mini App")).toHaveTextContent("▲ новое (было 0)");
+    expect(tile("Открытия сайта")).toHaveTextContent("= (было 1)");
     expect(tile("Добавили в корзину")).toHaveTextContent("1");
-    expect(tile("Создано ссылок")).toHaveTextContent("1");
+    expect(tile("Ссылок «Поделиться»")).toHaveTextContent("1");
     expect(tile("Успешных импортов")).toHaveTextContent("1");
-    expect(tile("Вернувшиеся посетители")).toHaveTextContent("0");
+    expect(screen.getByText(/Сравнение с: 05\.10–11\.10/)).toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Запросы без результатов" })).toHaveTextContent("kinoa");
     expect(screen.getByRole("region", { name: "Ошибки" })).toHaveTextContent("TypeError: x is undefined");
@@ -237,6 +245,7 @@ describe("admin dashboard", () => {
     await renderAdmin();
     await login();
     await userEvent.click(screen.getByRole("button", { name: "7 дней" }));
+    await openFilters();
     await userEvent.click(screen.getByLabelText(/Включить тестовый и автоматический трафик/));
     await waitFor(() => {
       const p = lastMetricsParams();
@@ -251,6 +260,7 @@ describe("admin dashboard", () => {
   it("filters are loaded from /api/admin/filters and sent with the backend parameter names", async () => {
     await renderAdmin();
     await login();
+    await openFilters();
     await userEvent.selectOptions(screen.getByLabelText("Платформа"), "miniapp");
     await waitFor(() => expect(lastMetricsParams().get("platform")).toBe("miniapp"));
     await userEvent.selectOptions(screen.getByLabelText("Тип источника"), "utm");
@@ -308,6 +318,119 @@ describe("admin dashboard", () => {
       expect(body.from).toBeTruthy();
     });
     expect(reqs.some((r) => r.url.includes("q=ann"))).toBe(false);
+  });
+});
+
+describe("admin dashboard v2", () => {
+  it("default preset is 7 days, a chosen preset is remembered, Today/Yesterday send one-day ranges", async () => {
+    await renderAdmin();
+    await login();
+    expect(screen.getByRole("button", { name: "7 дней" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Вчера" }));
+    await waitFor(() => {
+      const p = lastMetricsParams();
+      expect(p.get("from")).toBe(p.get("to"));
+      expect(p.get("to")).not.toBe(todaySofia());
+    });
+    expect(localStorage.getItem("bgp_admin_preset")).toBe("yesterday");
+    await userEvent.click(screen.getByRole("button", { name: "Сегодня" }));
+    await waitFor(() => {
+      const p = lastMetricsParams();
+      expect(p.get("from")).toBe(todaySofia());
+      expect(p.get("to")).toBe(todaySofia());
+    });
+  });
+
+  it("the initial range is computed from the Sofia date, not the browser/UTC date", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T22:30:00Z"));
+    try {
+      await renderAdmin();
+      await login();
+      const first = reqs.find((r) => r.url.startsWith("/api/admin/metrics")) as Req;
+      const p = new URL(first.url, "http://x").searchParams;
+      expect(p.get("to")).toBe("2026-10-19");
+      expect(p.get("from")).toBe("2026-10-13");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("custom period shows from/to inputs; filters collapse shows an active count", async () => {
+    await renderAdmin();
+    await login();
+    expect(screen.queryByLabelText("С")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Период…" }));
+    expect(screen.getByLabelText("С")).toBeInTheDocument();
+    await openFilters();
+    await userEvent.selectOptions(screen.getByLabelText("Платформа"), "miniapp");
+    expect(screen.getByRole("button", { name: "Фильтры (1)" })).toBeInTheDocument();
+  });
+
+  it("chart draws both lines; day buckets get date labels, hour buckets get times", async () => {
+    await renderAdmin();
+    await login();
+    const region = await screen.findByRole("region", { name: "Динамика" });
+    expect(region.querySelector('path[data-series="current"]')).not.toBeNull();
+    expect(region.querySelector('path[data-series="previous"]')).not.toBeNull();
+    expect(region).toHaveTextContent("12.10");
+    expect(region).toHaveTextContent("Текущий период");
+    expect(region).toHaveTextContent("Прошлый период");
+    await userEvent.click(region.querySelector('rect[data-hit="6"]') as Element);
+    expect(within(region).getByRole("status")).toHaveTextContent("18.10: текущий 2 · прошлый (11.10) 0");
+    cleanup();
+    loggedIn = false;
+
+    const hourly = structuredClone(METRICS) as typeof METRICS & { series: { bucket: string } };
+    hourly.series.bucket = "hour";
+    hourly.series.points = hourly.series.points.map((p, i) => ({ ...p, t: `2026-10-18T${String(10 + i).padStart(2, "0")}:00:00+03:00` }));
+    metricsData = hourly;
+    await renderAdmin();
+    await login();
+    const region2 = await screen.findByRole("region", { name: "Динамика" });
+    expect(region2).toHaveTextContent("10:00");
+  });
+
+  it("funnel shows % of 'Открыли' and deltas, steps counted independently", async () => {
+    await renderAdmin();
+    await login();
+    const funnel = await screen.findByRole("region", { name: "Воронка" });
+    const rows = within(funnel).getAllByRole("listitem");
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toHaveTextContent("Открыли");
+    expect(rows[0]).toHaveTextContent("100%");
+    expect(rows[0]).toHaveTextContent("▲ 100% (было 1)");
+    expect(rows[1]).toHaveTextContent("Каталог");
+    expect(rows[1]).toHaveTextContent("50%");
+    expect(rows[1]).toHaveTextContent("▲ новое (было 0)");
+    expect(funnel).toHaveTextContent("Шаги считаются независимо");
+  });
+
+  it("platforms and sources tables; unknown source is labelled", async () => {
+    await renderAdmin();
+    await login();
+    const platforms = await screen.findByRole("region", { name: "Платформы" });
+    expect(platforms).toHaveTextContent("Mini App");
+    expect(platforms).toHaveTextContent("▲ новое (было 0)");
+    const sources = screen.getByRole("region", { name: "Источники" });
+    expect(sources).toHaveTextContent("startapp / telegram / spring");
+    expect(sources).toHaveTextContent("Источник неизвестен");
+  });
+
+  it("noise errors are collapsed by default and the main table has only real errors", async () => {
+    const data = structuredClone(METRICS) as typeof METRICS;
+    data.errors.push({ ...data.errors[0], name: "Error", message: "Script error.", source: "external", noise: true } as never);
+    metricsData = data;
+    await renderAdmin();
+    await login();
+    const region = await screen.findByRole("region", { name: "Ошибки" });
+    expect(region).toHaveTextContent("TypeError: x is undefined");
+    expect(region).not.toHaveTextContent("Script error.");
+    const toggle = within(region).getByRole("button", { name: "Шум внешних скриптов (1)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(region).toHaveTextContent("браузер скрывает их текст");
+    await userEvent.click(toggle);
+    expect(region).toHaveTextContent("Error: Script error.");
   });
 });
 

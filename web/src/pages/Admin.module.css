@@ -77,9 +77,150 @@
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+}
+
+@media (min-width: 760px) {
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.delta {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.up {
+  color: #1b6e3c;
+}
+
+.down {
+  color: var(--discount);
+}
+
+.flat {
+  color: var(--muted);
+}
+
+.spark {
+  width: 100%;
+  height: 24px;
+  color: var(--brand);
+  margin-top: 4px;
+}
+
+.note {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 var(--space-2);
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.lineCur {
+  stroke: var(--brand);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.linePrev {
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0.8;
+}
+
+.dotCur {
+  fill: var(--brand);
+}
+
+.dotPrev {
+  fill: var(--muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0;
+  font-size: 13px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatchCur,
+.swatchPrev {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  border-top: 3px solid var(--brand);
+}
+
+.swatchPrev {
+  border-top: 2px dashed var(--muted);
+}
+
+.tooltip {
+  font-size: 13px;
+  min-height: 1.4em;
+  margin: 0;
+}
+
+.funnel {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-2);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.funnelHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.barTrack {
+  background: var(--brand-50);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.bar {
+  background: var(--brand);
+  height: 100%;
+  border-radius: 999px;
+}
+
+.noise {
+  margin-top: var(--space-3);
 }
 
 .tile {

@@ -47,6 +47,7 @@ export function loadClarity(id: string, doc: Document = document): boolean {
   }
   const s = doc.createElement("script");
   s.async = true;
+  s.crossOrigin = "anonymous";
   s.src = `https://www.clarity.ms/tag/${encodeURIComponent(id)}`;
   doc.head.appendChild(s);
   return true;

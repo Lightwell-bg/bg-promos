@@ -11,7 +11,6 @@ import {
   getMetrics,
   getUser,
   getUsers,
-  type AdminError,
   type AdminFilterOptions,
   type AdminQuery,
   type Metrics,
@@ -23,33 +22,22 @@ import { todaySofia } from "../domain/dates";
 import { LangProvider } from "../i18n/LangContext";
 import { setRobotsNoindex, setTitle } from "../platform/document";
 import styles from "./Admin.module.css";
+import { CHART_METRICS, TrendChart, type ChartMetric } from "./admin/Charts";
+import { ErrorsPanel, EmptyRow, FunnelPanel, KpiCards, PlatformsPanel, SourcesPanel } from "./admin/Panels";
+import {
+  NO_SOURCE,
+  PRESETS,
+  fmtTime,
+  loadPreset,
+  presetRange,
+  rangeLabel,
+  savePreset,
+  type PresetId,
+} from "./admin/adminUtils";
 
 /** Closed stats section (route /admin). Russian UI, mobile friendly, masked in Clarity, never indexed. */
 
-const PRESETS = [7, 30, 90] as const;
-const NO_SOURCE = "Источник неизвестен";
 const ANON_TEXT = "Личность неизвестна — анонимный посетитель сайта";
-
-/** ISO date (Sofia "today") shifted by `days`. */
-function shiftDate(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Sofia",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
 
 function Login({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState("");
@@ -103,68 +91,13 @@ function Login({ onDone }: { onDone: () => void }) {
   );
 }
 
-function Tile({ label, value, hint }: { label: string; value: number; hint?: string }) {
-  return (
-    <div className={styles.tile}>
-      <span className={styles.tileLabel}>{label}</span>
-      <strong className={styles.tileValue}>{value}</strong>
-      {hint && <span className={styles.tileHint}>{hint}</span>}
-    </div>
-  );
-}
-
-/** One error group; click expands the page path and the stack (plain text, React-escaped). */
-function ErrorRow({ error: e }: { error: AdminError }) {
-  const [open, setOpen] = useState(false);
-  const title = e.message ? `${e.name}: ${e.message}` : e.name;
-  const where = e.source ? `${e.where} · ${e.source}` : e.where;
-  const loc = e.file ? (e.line !== null ? `${e.file}:${e.line}${e.col !== null ? `:${e.col}` : ""}` : e.file) : "—";
-  return (
-    <>
-      <tr className={styles.errRow} onClick={() => setOpen((v) => !v)}>
-        <td className={styles.errTitle}>
-          <button
-            type="button"
-            className={styles.link}
-            aria-expanded={open}
-            onClick={(ev) => {
-              ev.stopPropagation();
-              setOpen((v) => !v);
-            }}
-          >
-            {title}
-          </button>
-        </td>
-        <td>{where}</td>
-        <td>{loc}</td>
-        <td>{e.count}</td>
-        <td>{fmtTime(e.lastSeen)}</td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={5} className={styles.errDetail}>
-            <div>Страница: {e.path || "—"}</div>
-            <pre className={styles.stack}>{e.stack || "Стек недоступен"}</pre>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-function Empty({ cols }: { cols: number }) {
-  return (
-    <tr>
-      <td colSpan={cols} className={styles.empty}>
-        Нет данных за период
-      </td>
-    </tr>
-  );
-}
+const Empty = EmptyRow;
 
 function Dashboard({
   query,
   onQuery,
+  preset,
+  onPreset,
   options,
   onAuthLost,
   onOpenUser,
@@ -172,6 +105,8 @@ function Dashboard({
 }: {
   query: AdminQuery;
   onQuery: (q: AdminQuery) => void;
+  preset: PresetId;
+  onPreset: (id: PresetId) => void;
   options: AdminFilterOptions;
   onAuthLost: () => void;
   onOpenUser: (id: string) => void;
@@ -218,13 +153,16 @@ function Dashboard({
     };
   }, [query, applied, page, onAuthLost, refreshKey]);
 
-  const k = metrics?.kpi;
+  const [metric, setMetric] = useState<ChartMetric>("users");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters =
+    [query.platform, query.lang, query.sourceKind, query.source, query.campaign].filter(Boolean).length +
+    (query.includeTest ? 1 : 0);
   const pages = users ? Math.max(1, Math.ceil(users.total / USERS_PAGE_SIZE)) : 1;
   const set = (patch: Partial<AdminQuery>) => {
     setPage(1);
     onQuery({ ...query, ...patch });
   };
-  const days = Math.round((Date.parse(`${query.to}T00:00:00Z`) - Date.parse(`${query.from}T00:00:00Z`)) / 86_400_000) + 1;
 
   function select(name: keyof AdminQuery, label: string, values: string[]) {
     return (
@@ -246,36 +184,58 @@ function Dashboard({
     <>
       <section className={styles.panel} aria-label="Период и фильтры">
         <div className={styles.presets} role="group" aria-label="Период">
-          {PRESETS.map((n) => (
+          {PRESETS.map((p) => (
             <button
-              key={n}
+              key={p.id}
               type="button"
-              className={`${styles.chip} ${days === n && query.to === todaySofia() ? styles.chipOn : ""}`}
-              onClick={() => set({ from: shiftDate(todaySofia(), -(n - 1)), to: todaySofia() })}
+              aria-pressed={preset === p.id}
+              className={`${styles.chip} ${preset === p.id ? styles.chipOn : ""}`}
+              onClick={() => {
+                setPage(1);
+                onPreset(p.id);
+              }}
             >
-              {n} дней
+              {p.label}
             </button>
           ))}
         </div>
-        <div className={styles.filters}>
-          <label className={styles.field}>
-            <span>С</span>
-            <input type="date" value={query.from} max={query.to} onChange={(e) => e.target.value && set({ from: e.target.value })} />
-          </label>
-          <label className={styles.field}>
-            <span>По</span>
-            <input type="date" value={query.to} min={query.from} onChange={(e) => e.target.value && set({ to: e.target.value })} />
-          </label>
-          {select("platform", "Платформа", options.platforms)}
-          {select("lang", "Язык", options.langs)}
-          {select("sourceKind", "Тип источника", options.sourceKinds)}
-          {select("source", "Источник", options.sources)}
-          {select("campaign", "Кампания", options.campaigns)}
-          <label className={styles.check}>
-            <input type="checkbox" checked={query.includeTest} onChange={(e) => set({ includeTest: e.target.checked })} />
-            <span>Включить тестовый и автоматический трафик</span>
-          </label>
-        </div>
+        {preset === "custom" && (
+          <div className={styles.filters}>
+            <label className={styles.field}>
+              <span>С</span>
+              <input type="date" value={query.from} max={query.to} onChange={(e) => e.target.value && set({ from: e.target.value })} />
+            </label>
+            <label className={styles.field}>
+              <span>По</span>
+              <input type="date" value={query.to} min={query.from} onChange={(e) => e.target.value && set({ to: e.target.value })} />
+            </label>
+          </div>
+        )}
+        <p className={styles.note}>
+          Период: {rangeLabel(query.from, query.to)}
+          {metrics?.previousRange.from ? ` · Сравнение с: ${rangeLabel(metrics.previousRange.from, metrics.previousRange.to)}` : ""}
+        </p>
+        <button
+          type="button"
+          className={styles.link}
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          {activeFilters ? `Фильтры (${activeFilters})` : "Фильтры"}
+        </button>
+        {filtersOpen && (
+          <div className={styles.filters}>
+            {select("platform", "Платформа", options.platforms)}
+            {select("lang", "Язык", options.langs)}
+            {select("sourceKind", "Тип источника", options.sourceKinds)}
+            {select("source", "Источник", options.sources)}
+            {select("campaign", "Кампания", options.campaigns)}
+            <label className={styles.check}>
+              <input type="checkbox" checked={query.includeTest} onChange={(e) => set({ includeTest: e.target.checked })} />
+              <span>Включить тестовый и автоматический трафик</span>
+            </label>
+          </div>
+        )}
       </section>
 
       {failed && (
@@ -284,22 +244,31 @@ function Dashboard({
         </p>
       )}
 
-      <section aria-label="Показатели" className={styles.tiles}>
-        <Tile
-          label="Пользователи"
-          value={k?.users ?? 0}
-          hint={`Telegram: ${k?.usersTg ?? 0} · Анонимные: ${k?.usersAnon ?? 0}`}
-        />
-        <Tile label="Сессии" value={k?.sessions ?? 0} />
-        <Tile label="Запусков бота" value={k?.botStarts ?? 0} />
-        <Tile label="Открытий Mini App" value={k?.miniappOpens ?? 0} />
-        <Tile label="Открытий сайта" value={k?.siteOpens ?? 0} />
-        <Tile label="Загрузок каталога" value={k?.catalogLoads ?? 0} />
-        <Tile label="Добавили в корзину" value={k?.cartAddUsers ?? 0} hint="пользователей" />
-        <Tile label="Создано ссылок" value={k?.shareLinks ?? 0} />
-        <Tile label="Успешных импортов" value={k?.importsOk ?? 0} />
-        <Tile label="Вернувшиеся посетители" value={k?.returning ?? 0} />
-      </section>
+      <KpiCards metrics={metrics} />
+
+      {metrics && (
+        <section className={styles.panel} aria-label="Динамика">
+          <h2>Динамика</h2>
+          <div className={styles.presets} role="group" aria-label="Метрика графика">
+            {CHART_METRICS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={metric === m.id}
+                className={`${styles.chip} ${metric === m.id ? styles.chipOn : ""}`}
+                onClick={() => setMetric(m.id)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <TrendChart series={metrics.series} metric={metric} />
+        </section>
+      )}
+
+      {metrics && <FunnelPanel funnel={metrics.funnel} previous={metrics.previousFunnel} />}
+      {metrics && <PlatformsPanel platforms={metrics.platforms} />}
+      {metrics && <SourcesPanel sources={metrics.sources} />}
 
       <section className={styles.panel} aria-label="Топ предложений">
         <h2>Топ предложений</h2>
@@ -355,34 +324,7 @@ function Dashboard({
         </div>
       </section>
 
-      <section className={styles.panel} aria-label="Ошибки">
-        <h2>Ошибки</h2>
-        <div className={styles.scroll}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Ошибка</th>
-                <th>Где</th>
-                <th>Файл:строка</th>
-                <th>Количество</th>
-                <th>Последний раз</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics?.errors.length ? (
-                metrics.errors.map((e, i) => (
-                  <ErrorRow
-                    key={`${e.name}|${e.where}|${e.message ?? ""}|${e.source ?? ""}|${e.file ?? ""}|${e.line ?? ""}|${i}`}
-                    error={e}
-                  />
-                ))
-              ) : (
-                <Empty cols={5} />
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <ErrorsPanel errors={metrics?.errors ?? []} />
 
       <section className={styles.panel} aria-label="Пользователи">
         <h2>Пользователи</h2>
@@ -616,11 +558,11 @@ function UserView({
 
 const EMPTY_OPTIONS: AdminFilterOptions = { platforms: [], langs: [], sourceKinds: [], sources: [], campaigns: [] };
 
-function initialQuery(): AdminQuery {
-  const to = todaySofia();
+function initialQuery(preset: PresetId): AdminQuery {
+  const range = presetRange(preset, todaySofia()) as { from: string; to: string };
   return {
-    from: shiftDate(to, -29),
-    to,
+    from: range.from,
+    to: range.to,
     platform: "",
     lang: "",
     sourceKind: "",
@@ -634,7 +576,18 @@ export function Admin() {
   // null = checking the session; false = login form; true = dashboard.
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [options, setOptions] = useState<AdminFilterOptions>(EMPTY_OPTIONS);
-  const [query, setQuery] = useState<AdminQuery>(initialQuery);
+  const [preset, setPreset] = useState<PresetId>(loadPreset);
+  const [query, setQuery] = useState<AdminQuery>(() => initialQuery(preset));
+
+  /** A preset recomputes the range from the Sofia "today"; "custom" keeps the current range. Always a new query object (refetch). */
+  const choosePreset = useCallback((id: PresetId) => {
+    setPreset(id);
+    savePreset(id);
+    setQuery((q) => {
+      const range = presetRange(id, todaySofia());
+      return range ? { ...q, ...range } : { ...q };
+    });
+  }, []);
   const [userId, setUserId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -695,6 +648,8 @@ export function Admin() {
               <Dashboard
                 query={query}
                 onQuery={setQuery}
+                preset={preset}
+                onPreset={choosePreset}
                 options={options}
                 onAuthLost={authLost}
                 onOpenUser={setUserId}

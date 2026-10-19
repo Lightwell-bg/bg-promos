@@ -29,6 +29,19 @@ log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 3
 PLATFORMS = ("web", "miniapp", "bot")
+# app_error groups that are usually browser/extension noise rather than our bugs
+NOISE_ERROR_NAMES = frozenset({"ScriptError", "ResizeObserver"})
+
+_SESS_FROM = "FROM sessions s JOIN sources src ON src.id = s.source_id JOIN visitors v ON v.id = s.visitor_id"
+_EV_FROM = ("FROM events e JOIN sessions s ON s.id = e.session_id "
+            "JOIN sources src ON src.id = s.source_id")
+
+
+def _source_key(kind: str, source: str, campaign: str) -> tuple[str, str | None, str | None]:
+    """Group key of the sources breakdown; unknown traffic is one group without source/campaign."""
+    if kind == "unknown":
+        return ("unknown", None, None)
+    return (kind, source or None, campaign or None)
 
 _SCHEMA_V1 = """
 CREATE TABLE sources (
@@ -351,28 +364,14 @@ class AnalyticsStore:
     ) -> dict:
         lo, hi = self.period_bounds(d_from, d_to)
         flt, fp = self._filters(platform, lang, source_kind, source, campaign, include_test, include_automated)
-        sess_from = "FROM sessions s JOIN sources src ON src.id = s.source_id JOIN visitors v ON v.id = s.visitor_id"
-        ev_from = ("FROM events e JOIN sessions s ON s.id = e.session_id "
-                   "JOIN sources src ON src.id = s.source_id")
+        ev_from = _EV_FROM
         ev_where = "WHERE e.ts >= ? AND e.ts < ?" + flt
         ev_params = [lo, hi, *fp]
+        p_from, p_to = self.previous_range(d_from, d_to)
+        fl = (flt, fp, include_test, include_automated)
         with self._ro() as conn:
-            sess = conn.execute(
-                f"SELECT COUNT(*) AS sessions, COUNT(DISTINCT s.visitor_id) AS users, "
-                f"COUNT(DISTINCT CASE WHEN v.kind='tg' THEN s.visitor_id END) AS tg, "
-                f"COUNT(DISTINCT CASE WHEN v.kind='anon' THEN s.visitor_id END) AS anon "
-                f"{sess_from} WHERE s.started_at >= ? AND s.started_at < ?{flt}",
-                [lo, hi, *fp],
-            ).fetchone()
-            counts = {r["name"]: r["n"] for r in conn.execute(
-                f"SELECT e.name AS name, COUNT(*) AS n {ev_from} {ev_where} GROUP BY e.name", ev_params)}
-            cart_users = conn.execute(
-                f"SELECT COUNT(DISTINCT e.visitor_id) {ev_from} {ev_where} AND e.name = 'cart_add'", ev_params
-            ).fetchone()[0]
-            imports_ok = conn.execute(
-                f"SELECT COUNT(*) {ev_from} {ev_where} AND e.name = 'cart_import' "
-                f"AND json_extract(e.props, '$.mode') IN ('filled', 'created')", ev_params
-            ).fetchone()[0]
+            cur, funnel = self._kpi(conn, d_from, d_to, fl)
+            prev, prev_funnel = self._kpi(conn, p_from, p_to, fl)
 
             def top(name: str) -> list[dict]:
                 rows = conn.execute(
@@ -392,7 +391,8 @@ class AnalyticsStore:
             # MAX(e.ts) makes SQLite take the bare columns (stack, path) from the latest row of a group.
             errors = [dict(name=r["nm"], where=r["wh"], message=r["msg"], source=r["src"], file=r["fl"],
                            line=r["ln"], col=r["cl"], count=r["n"], last_seen=r["last_seen"],
-                           stack=r["stk"], path=r["pth"])
+                           stack=r["stk"], path=r["pth"],
+                           noise=r["nm"] in NOISE_ERROR_NAMES or r["src"] == "external")
                       for r in conn.execute(
                 f"SELECT json_extract(e.props,'$.name') AS nm, json_extract(e.props,'$.where') AS wh, "
                 f"json_extract(e.props,'$.message') AS msg, json_extract(e.props,'$.source') AS src, "
@@ -401,26 +401,193 @@ class AnalyticsStore:
                 f"json_extract(e.props,'$.stack') AS stk, json_extract(e.props,'$.path') AS pth "
                 f"{ev_from} {ev_where} AND e.name = 'app_error' "
                 f"GROUP BY nm, wh, msg, src, fl, ln ORDER BY n DESC, last_seen DESC LIMIT 50", ev_params)]
-            active = [r[0] for r in conn.execute(
-                f"SELECT DISTINCT s.visitor_id {sess_from} WHERE s.started_at >= ? AND s.started_at < ?{flt}",
-                [lo, hi, *fp])]
-            returning = self._returning(conn, active, include_test, include_automated)
+            series = self._series(conn, d_from, d_to, p_from, p_to, fl)
+            sources = self._sources(conn, d_from, d_to, p_from, p_to, fl)
+            platforms = self._platforms(conn, d_from, d_to, p_from, p_to, fl)
         return {
-            "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
-            "users": {"total": sess["users"], "tg": sess["tg"], "anon": sess["anon"]},
-            "sessions": sess["sessions"],
-            "bot_starts": counts.get("bot_start", 0),
-            "miniapp_opens": counts.get("miniapp_open", 0),
-            "site_opens": counts.get("site_open", 0),
-            "catalog_loads": counts.get("catalog_loaded", 0),
-            "cart_add_users": cart_users,
-            "share_links": counts.get("share_link_created", 0),
-            "imports_successful": imports_ok,
-            "returning_visitors": returning,
+            **cur,
             "top_offers": {"viewed": top_viewed, "carted": top_carted},
             "zero_result_queries": zero,
             "errors": errors,
+            "previous": prev,
+            "previous_range": {"from": p_from.isoformat(), "to": p_to.isoformat()},
+            "series": series,
+            "funnel": {"current": funnel, "previous": prev_funnel},
+            "sources": sources,
+            "platforms": platforms,
         }
+
+    @staticmethod
+    def previous_range(d_from: date, d_to: date) -> tuple[date, date]:
+        """The period of equal length immediately before [d_from, d_to] (inclusive Sofia dates)."""
+        days = (d_to - d_from).days + 1
+        p_to = d_from - timedelta(days=1)
+        return p_to - timedelta(days=days - 1), p_to
+
+    def _kpi(self, conn: sqlite3.Connection, d_from: date, d_to: date, fl: tuple) -> tuple[dict, dict]:
+        """KPI object (aggregate SQL) and funnel of distinct users for one period."""
+        flt, fp, include_test, include_automated = fl
+        lo, hi = self.period_bounds(d_from, d_to)
+        sess = conn.execute(
+            f"SELECT COUNT(*) AS sessions, COUNT(DISTINCT s.visitor_id) AS users, "
+            f"COUNT(DISTINCT CASE WHEN v.kind='tg' THEN s.visitor_id END) AS tg, "
+            f"COUNT(DISTINCT CASE WHEN v.kind='anon' THEN s.visitor_id END) AS anon, "
+            f"COUNT(DISTINCT CASE WHEN v.first_seen >= ? AND v.first_seen < ? THEN s.visitor_id END) AS new_users "
+            f"{_SESS_FROM} WHERE s.started_at >= ? AND s.started_at < ?{flt}",
+            [lo, hi, lo, hi, *fp],
+        ).fetchone()
+        ev_where = "WHERE e.ts >= ? AND e.ts < ?" + flt
+        ev = {r["name"]: (r["n"], r["u"]) for r in conn.execute(
+            f"SELECT e.name AS name, COUNT(*) AS n, COUNT(DISTINCT e.visitor_id) AS u "
+            f"{_EV_FROM} {ev_where} GROUP BY e.name", [lo, hi, *fp])}
+        imports_ok = conn.execute(
+            f"SELECT COUNT(*) {_EV_FROM} {ev_where} AND e.name = 'cart_import' "
+            f"AND json_extract(e.props, '$.mode') IN ('filled', 'created')", [lo, hi, *fp]
+        ).fetchone()[0]
+        active = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT s.visitor_id {_SESS_FROM} WHERE s.started_at >= ? AND s.started_at < ?{flt}",
+            [lo, hi, *fp])]
+        returning = self._returning(conn, active, include_test, include_automated)
+
+        def n(name: str) -> int:
+            return ev.get(name, (0, 0))[0]
+
+        def u(name: str) -> int:
+            return ev.get(name, (0, 0))[1]
+
+        kpi = {
+            "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
+            "users": {"total": sess["users"], "tg": sess["tg"], "anon": sess["anon"]},
+            "sessions": sess["sessions"],
+            "bot_starts": n("bot_start"),
+            "miniapp_opens": n("miniapp_open"),
+            "site_opens": n("site_open"),
+            "catalog_loads": n("catalog_loaded"),
+            "cart_add_users": u("cart_add"),
+            "share_links": n("share_link_created"),
+            "imports_successful": imports_ok,
+            "returning_visitors": returning,
+            "new_users": sess["new_users"],
+            "returning_users": sess["users"] - sess["new_users"],
+        }
+        funnel = {"opened": sess["users"], "catalog_loaded": u("catalog_loaded"), "offer_view": u("offer_view"),
+                  "cart_add": u("cart_add"), "share_link_created": u("share_link_created")}
+        return kpi, funnel
+
+    # ---- series / sources / platforms -----------------------------------------------------
+    def _buckets(self, d_from: date, d_to: date) -> tuple[str, list[datetime], list[str]]:
+        """Bucket kind, Sofia local starts and UTC upper bounds (exclusive) of every bucket.
+
+        One day -> hourly buckets walked in UTC (Sofia offsets are whole hours, so a DST day has 23 or
+        25 of them); otherwise one bucket per Sofia calendar day.
+        """
+        utc = timezone.utc
+        if d_from == d_to:
+            lo = datetime.combine(d_from, time(0), tzinfo=self.tz).astimezone(utc)
+            hi = datetime.combine(d_to + timedelta(days=1), time(0), tzinfo=self.tz).astimezone(utc)
+            starts, bounds, cur = [], [], lo
+            while cur < hi:
+                starts.append(cur.astimezone(self.tz))
+                cur += timedelta(hours=1)
+                bounds.append(utc_iso(cur))
+            return "hour", starts, bounds
+        starts, bounds, d = [], [], d_from
+        while d <= d_to:
+            starts.append(datetime.combine(d, time(0), tzinfo=self.tz))
+            bounds.append(utc_iso(datetime.combine(d + timedelta(days=1), time(0), tzinfo=self.tz)))
+            d += timedelta(days=1)
+        return "day", starts, bounds
+
+    @staticmethod
+    def _case(col: str, bounds: list[str]) -> str:
+        """SQL CASE mapping a UTC timestamp column to its bucket index (bounds are inline-safe ISO literals)."""
+        whens = " ".join(f"WHEN {col} < '{b}' THEN {i}" for i, b in enumerate(bounds[:-1]))
+        return f"CASE {whens} ELSE {len(bounds) - 1} END"
+
+    def _series_points(self, conn: sqlite3.Connection, d_from: date, d_to: date, fl: tuple,
+                       kind: str, starts: list[datetime], bounds: list[str]) -> list[dict]:
+        flt, fp, _t, _a = fl
+        lo, hi = self.period_bounds(d_from, d_to)
+        pts = [{"t": st.isoformat(), "users": 0, "sessions": 0, "cart_users": 0,
+                "bot_starts": 0, "miniapp_opens": 0, "site_opens": 0} for st in starts]
+        for r in conn.execute(
+            f"SELECT {self._case('s.started_at', bounds)} AS b, COUNT(*) AS sessions, "
+            f"COUNT(DISTINCT s.visitor_id) AS users {_SESS_FROM} "
+            f"WHERE s.started_at >= ? AND s.started_at < ?{flt} GROUP BY b", [lo, hi, *fp]):
+            pts[r["b"]]["sessions"], pts[r["b"]]["users"] = r["sessions"], r["users"]
+        field = {"bot_start": "bot_starts", "miniapp_open": "miniapp_opens", "site_open": "site_opens"}
+        for r in conn.execute(
+            f"SELECT {self._case('e.ts', bounds)} AS b, e.name AS name, COUNT(*) AS n, "
+            f"COUNT(DISTINCT e.visitor_id) AS u {_EV_FROM} "
+            f"WHERE e.ts >= ? AND e.ts < ? AND e.name IN ('bot_start','miniapp_open','site_open','cart_add')"
+            f"{flt} GROUP BY b, e.name", [lo, hi, *fp]):
+            if r["name"] == "cart_add":
+                pts[r["b"]]["cart_users"] = r["u"]
+            else:
+                pts[r["b"]][field[r["name"]]] = r["n"]
+        return pts
+
+    def _series(self, conn: sqlite3.Connection, d_from: date, d_to: date, p_from: date, p_to: date,
+                fl: tuple) -> dict:
+        kind, starts, bounds = self._buckets(d_from, d_to)
+        points = self._series_points(conn, d_from, d_to, fl, kind, starts, bounds)
+        pkind, pstarts, pbounds = self._buckets(p_from, p_to)
+        prev = self._series_points(conn, p_from, p_to, fl, pkind, pstarts, pbounds)
+        prev = prev[:len(points)]
+        for i in range(len(prev), len(points)):  # pad with zeros (DST day length differs)
+            prev.append({"t": points[i]["t"], "users": 0, "sessions": 0, "cart_users": 0,
+                         "bot_starts": 0, "miniapp_opens": 0, "site_opens": 0})
+        return {"bucket": kind, "points": points, "previous_points": prev}
+
+    def _source_groups(self, conn: sqlite3.Connection, d_from: date, d_to: date, fl: tuple) -> dict:
+        flt, fp, _t, _a = fl
+        lo, hi = self.period_bounds(d_from, d_to)
+        groups: dict[tuple, dict] = {}
+        for r in conn.execute(
+            f"SELECT src.kind AS kind, src.source AS source, src.campaign AS campaign, "
+            f"COUNT(*) AS sessions, COUNT(DISTINCT s.visitor_id) AS users, "
+            f"COUNT(DISTINCT CASE WHEN v.first_seen >= ? AND v.first_seen < ? AND fs.kind = src.kind "
+            f"AND fs.source = src.source AND fs.campaign = src.campaign THEN s.visitor_id END) AS new_users "
+            f"{_SESS_FROM} LEFT JOIN sources fs ON fs.id = v.first_source_id "
+            f"WHERE s.started_at >= ? AND s.started_at < ?{flt} GROUP BY 1, 2, 3", [lo, hi, lo, hi, *fp]):
+            key = _source_key(r["kind"], r["source"], r["campaign"])
+            groups[key] = {"sessions": r["sessions"], "users": r["users"], "new_users": r["new_users"],
+                           "cart_users": 0}
+        for r in conn.execute(
+            f"SELECT src.kind AS kind, src.source AS source, src.campaign AS campaign, "
+            f"COUNT(DISTINCT e.visitor_id) AS u {_EV_FROM} "
+            f"WHERE e.ts >= ? AND e.ts < ? AND e.name = 'cart_add'{flt} GROUP BY 1, 2, 3", [lo, hi, *fp]):
+            # the session may have started before the period: the group exists only through its events
+            g = groups.setdefault(_source_key(r["kind"], r["source"], r["campaign"]),
+                                  {"sessions": 0, "users": 0, "new_users": 0, "cart_users": 0})
+            g["cart_users"] = r["u"]
+        return groups
+
+    def _sources(self, conn: sqlite3.Connection, d_from: date, d_to: date, p_from: date, p_to: date,
+                 fl: tuple) -> list[dict]:
+        cur = self._source_groups(conn, d_from, d_to, fl)
+        prev = self._source_groups(conn, p_from, p_to, fl)
+        rows = [{"kind": k[0], "source": k[1], "campaign": k[2], "users": g["users"], "sessions": g["sessions"],
+                 "cart_users": g["cart_users"], "new_users": g["new_users"],
+                 "previous_users": prev.get(k, {}).get("users", 0)} for k, g in cur.items()]
+        rows.sort(key=lambda r: (-r["users"], r["kind"], r["source"] or "", r["campaign"] or ""))
+        return rows[:50]
+
+    def _platforms(self, conn: sqlite3.Connection, d_from: date, d_to: date, p_from: date, p_to: date,
+                   fl: tuple) -> list[dict]:
+        flt, fp, _t, _a = fl
+
+        def one(a: date, b: date) -> dict[str, tuple[int, int]]:
+            lo, hi = self.period_bounds(a, b)
+            return {r["platform"]: (r["users"], r["sessions"]) for r in conn.execute(
+                f"SELECT s.platform AS platform, COUNT(DISTINCT s.visitor_id) AS users, COUNT(*) AS sessions "
+                f"{_SESS_FROM} WHERE s.started_at >= ? AND s.started_at < ?{flt} GROUP BY s.platform",
+                [lo, hi, *fp])}
+
+        cur, prev = one(d_from, d_to), one(p_from, p_to)
+        return [{"platform": p, "users": cur.get(p, (0, 0))[0], "sessions": cur.get(p, (0, 0))[1],
+                 "previous_users": prev.get(p, (0, 0))[0], "previous_sessions": prev.get(p, (0, 0))[1]}
+                for p in PLATFORMS]
 
     def _returning(self, conn: sqlite3.Connection, visitor_ids: list[str],
                    include_test: bool, include_automated: bool) -> int:
