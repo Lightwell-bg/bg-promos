@@ -20,7 +20,7 @@ from .sources.base import RawDocument, Source
 from .sources.billa import BillaSource
 from .sources.kaufland import KauflandSource
 from .sources.lidl import LidlSource
-from .storage import Storage
+from .storage import Storage, count_active_on
 
 log = logging.getLogger(__name__)
 
@@ -219,17 +219,22 @@ def run_chain(
         offers = source.parse(docs)
         count = len(offers)
 
+        # The guard counts offers ACTIVE on the run's Sofia date: chains list next week's
+        # offers late in the week, so total counts swing weekly (Kaufland, 2026-10-19).
+        run_day = now_utc.astimezone(settings.tz).date()
+        active = count_active_on(offers, run_day)
+
         problem = None
         minimum = settings.chain(chain).min_expected_offers
-        if count < minimum:
-            problem = f"only {count} offers, expected at least {minimum}"
+        if active < minimum:
+            problem = f"only {active} offers active on {run_day} (of {count} total), expected at least {minimum}"
         else:
-            history = storage.recent_ok_counts(chain, settings.history_runs)
+            history = storage.recent_ok_active_counts(chain, settings.history_runs)
             if history:
                 median = statistics.median(history)
-                if count < settings.min_ratio * median:
+                if active < settings.min_ratio * median:
                     problem = (
-                        f"{count} offers is below {settings.min_ratio:.0%} of the median "
+                        f"{active} active offers is below {settings.min_ratio:.0%} of the median "
                         f"{median:g} of the last {len(history)} good runs"
                     )
         if problem and accept_suspicious and count > 0:
@@ -240,7 +245,7 @@ def run_chain(
             storage.finish_run(run_id, "suspicious", count, content_hash, problem)
             return "suspicious"
 
-        stats = storage.save_offers_and_finish(run_id, chain, offers, content_hash)
+        stats = storage.save_offers_and_finish(run_id, chain, offers, content_hash, run_day)
         log.info("%s: ok, %s", chain, stats)
         return "ok"
     except Exception as exc:  # one chain's failure must not stop the others

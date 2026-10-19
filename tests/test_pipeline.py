@@ -4,7 +4,7 @@ import gzip
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -20,7 +20,7 @@ from bg_promos.pipeline import (
 from bg_promos.sources.base import RawDocument
 from bg_promos.storage import Storage
 
-from conftest import make_offer
+from conftest import make_offer, seed
 
 SOFIA = ZoneInfo("Europe/Sofia")
 NOW = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)
@@ -172,6 +172,123 @@ def test_cli_accept_suspicious_flag(monkeypatch):
     monkeypatch.setattr(cli.config, "load", lambda path=None: type("S", (), {"log_level": "INFO"})())
     assert cli.main(["collect", "--accept-suspicious"]) == 0
     assert seen["accept_suspicious"] is True
+
+
+# ---- guard counts offers active on the run's Sofia date -----------------------------------
+
+CUR = (date(2026, 10, 12), date(2026, 10, 18))   # active on NOW (2026-10-17)
+FUT = (date(2026, 10, 19), date(2026, 10, 25))   # next week: future-only on NOW
+
+
+class WeekSource:
+    """Source with ``current`` offers active on NOW, ``future`` next-week ones and ``undated`` ones."""
+
+    chain = "kaufland"
+
+    def __init__(self, current=0, future=0, undated=0, current_window=CUR):
+        self.current, self.future, self.undated, self.window = current, future, undated, current_window
+
+    def fetch(self, http):
+        return [RawDocument("doc", "https://example.test/", f"{self.current}-{self.future}-{self.undated}".encode())]
+
+    def parse(self, docs):
+        out = [make_offer(chain="kaufland", key=f"c{i}", valid_from=self.window[0], valid_to=self.window[1])
+               for i in range(self.current)]
+        out += [make_offer(chain="kaufland", key=f"f{i}", valid_from=FUT[0], valid_to=FUT[1]) for i in range(self.future)]
+        out += [make_offer(chain="kaufland", key=f"u{i}", valid_from=None, valid_to=None) for i in range(self.undated)]
+        return out
+
+
+def _history(settings, n=3, **kw):
+    settings.chains["kaufland"].min_expected_offers = 1
+    for _ in range(n):
+        assert run_collect(settings, [WeekSource(**kw)]) == 0
+
+
+def test_monday_scenario_drop_of_total_but_not_of_active_is_ok(settings):
+    _history(settings, current=100, future=100)  # late-week runs: 200 total, 100 active
+    assert run_collect(settings, [WeekSource(current=68)]) == 0  # Monday: 68 total/active >= 60 % of 100
+    assert runs(settings, "kaufland")[-1]["status"] == "ok"
+
+
+def test_broken_run_with_few_active_offers_is_suspicious(settings):
+    _history(settings, current=100, future=100)
+    assert run_collect(settings, [WeekSource(current=30)]) == 1
+    last = runs(settings, "kaufland")[-1]
+    assert last["status"] == "suspicious" and "active" in last["error"] and "median" in last["error"]
+
+
+def test_future_only_spike_does_not_mask_broken_run(settings):
+    _history(settings, current=100, future=100)
+    assert run_collect(settings, [WeekSource(current=30, future=300)]) == 1  # 330 total, only 30 active
+    assert runs(settings, "kaufland")[-1]["status"] == "suspicious"
+
+
+def test_floor_applies_to_active_count(settings):
+    settings.chains["kaufland"].min_expected_offers = 50
+    assert run_collect(settings, [WeekSource(current=10, future=100)]) == 1
+    last = runs(settings, "kaufland")[-1]
+    assert last["status"] == "suspicious" and "only 10 offers active" in last["error"]
+    assert last["offers_count"] == 110
+
+
+def test_offers_without_dates_count_as_active(settings):
+    _history(settings, undated=10)
+    assert run_collect(settings, [WeekSource(undated=6)]) == 0   # exactly 60 %
+    assert run_collect(settings, [WeekSource(undated=4)]) == 1   # below 60 %
+
+
+def test_run_day_is_the_sofia_date_at_midnight(settings):
+    _history(settings, current=10)
+    # 20:30 UTC on 17 Oct = 23:30 in Sofia (EEST, UTC+3): offers valid until the 17th are still active.
+    late = datetime(2026, 10, 17, 20, 30, tzinfo=timezone.utc)
+    assert run_collect(settings, [WeekSource(current=10, current_window=(date(2026, 10, 12), date(2026, 10, 17)))],
+                       now=late) == 0
+    # 21:30 UTC = 00:30 on the 18th in Sofia: the same offers have ended -> 0 active.
+    after = datetime(2026, 10, 17, 21, 30, tzinfo=timezone.utc)
+    assert run_collect(settings, [WeekSource(current=10, current_window=(date(2026, 10, 12), date(2026, 10, 17)))],
+                       now=after) == 1
+    last = runs(settings, "kaufland")[-1]
+    assert last["status"] == "suspicious" and "active on 2026-10-18" in last["error"]
+
+
+def test_history_without_active_count_is_ignored(settings):
+    """Old ok runs (active_count NULL) are excluded; with no usable history only the floor applies."""
+    settings.chains["kaufland"].min_expected_offers = 1
+    for _ in range(3):
+        seed(settings, "kaufland", [make_offer(chain="kaufland", key=str(i)) for i in range(500)])
+    with Storage(settings.db_path) as st:
+        st.conn.execute("UPDATE scrape_runs SET active_count = NULL")
+        st.conn.commit()
+        assert st.recent_ok_active_counts("kaufland", 5) == []
+    assert run_collect(settings, [WeekSource(current=5)]) == 0
+
+
+def test_migration_v1_adds_active_count_without_backfill(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    st = Storage(path)
+    run_id = st.start_run("kaufland")
+    st.save_offers(run_id, "kaufland", [
+        make_offer(chain="kaufland", key="a", valid_from=date(2026, 10, 1), valid_to=date(2026, 10, 30)),
+        make_offer(chain="kaufland", key="b", valid_from=date(2090, 1, 1), valid_to=date(2090, 1, 7)),
+        make_offer(chain="kaufland", key="c", valid_from=None, valid_to=None),
+    ])
+    st.finish_run(run_id, "ok", 3)
+    st.conn.execute("UPDATE scrape_runs SET started_at = '2026-10-17T10:00:00+00:00'")
+    st.conn.commit()
+    st.close()
+    raw = sqlite3.connect(path)  # downgrade to a v1 database: no column, version 1
+    raw.execute("ALTER TABLE scrape_runs DROP COLUMN active_count")
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+    with Storage(path) as st:
+        assert st.recent_ok_active_counts("kaufland", 5) == []  # old runs stay NULL
+        assert st.conn.execute("SELECT active_count FROM scrape_runs").fetchone()[0] is None
+    with Storage(path) as st:  # idempotent
+        assert st.recent_ok_active_counts("kaufland", 5) == []
 
 
 def test_failure_of_one_source_does_not_block_others(settings):

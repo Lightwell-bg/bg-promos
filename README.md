@@ -259,6 +259,7 @@ Price conditions (`offer_prices.kind`), money in **integer EUR cents**:
 ## Completeness and stale logic
 
 - A run with fewer offers than `min_expected_offers`, or fewer than `min_ratio` x the median of the last good runs, is `suspicious`: it is not saved and the previous good data stays.
+- Both checks count only offers **active on the run's date** (Europe/Sofia; `valid_from <= day <= valid_to`, missing dates count as active) and compare with the same count of the last good runs, so next week's offers that a chain lists late in the week (Kaufland) do not distort the ratio.
 - A suspicious result stays suspicious: there is no automatic acceptance of a new baseline. The export keeps the last good data marked `stale`; the owner accepts a new baseline manually with `collect --accept-suspicious` (saves the offers despite failed thresholds, only if at least one offer was found).
 - Saving a run's offers and marking the run `ok` happen in one transaction; on any failure everything is rolled back, the run is marked `failed` and the previous snapshot stays intact.
 - The export always uses the **last successful run** of each chain.

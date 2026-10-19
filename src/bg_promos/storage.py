@@ -22,10 +22,12 @@ from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .models import Offer, PriceCondition
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+GUARD_TZ = ZoneInfo("Europe/Sofia")  # day on which "active offers" are counted for the completeness guard
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scrape_runs (
@@ -38,7 +40,8 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
     offers_count  INTEGER,
     content_hash  TEXT,
     content_changed INTEGER,
-    error         TEXT
+    error         TEXT,
+    active_count  INTEGER   -- offers active on the run's Sofia date (completeness guard)
 );
 CREATE INDEX IF NOT EXISTS ix_runs_chain ON scrape_runs(chain, id);
 
@@ -118,6 +121,16 @@ def _d(v: date | None) -> str:
     return v.isoformat() if v else ""
 
 
+def is_active_on(valid_from: date | None, valid_to: date | None, day: date) -> bool:
+    """Offer is active on ``day``; an unknown (None) bound is open-ended."""
+    return (valid_from is None or valid_from <= day) and (valid_to is None or valid_to >= day)
+
+
+def count_active_on(offers: Iterable[Offer], day: date) -> int:
+    """Number of offers active on ``day`` (future-only and already ended offers excluded)."""
+    return sum(1 for o in offers if is_active_on(o.valid_from, o.valid_to, day))
+
+
 class Storage:
     def __init__(self, path: str | Path) -> None:
         self.path = str(path)
@@ -159,6 +172,11 @@ class Storage:
         if version < SCHEMA_VERSION:
             with self.conn:
                 self.conn.executescript(SCHEMA)
+                cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(scrape_runs)")}
+                if "active_count" not in cols:  # v1 -> v2, idempotent
+                    self.conn.execute("ALTER TABLE scrape_runs ADD COLUMN active_count INTEGER")
+                # No backfill: offers keep no per-run membership, so old runs stay NULL and are
+                # skipped by the guard until new runs accumulate (only the floor applies meanwhile).
                 self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     # ---- runs -------------------------------------------------------------
@@ -214,6 +232,15 @@ class Storage:
         ).fetchall()
         return [r[0] for r in rows]
 
+    def recent_ok_active_counts(self, chain: str, limit: int) -> list[int]:
+        """Active-on-run-date counts of the last ``limit`` ok runs that have one (older runs are skipped)."""
+        rows = self.conn.execute(
+            "SELECT active_count FROM scrape_runs WHERE chain = ? AND status = 'ok' "
+            "AND active_count IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (chain, limit),
+        ).fetchall()
+        return [r[0] for r in rows]
+
     def last_run(self, chain: str, status: str | None = None) -> sqlite3.Row | None:
         sql = "SELECT * FROM scrape_runs WHERE chain = ? AND status != 'running'"
         args: list[Any] = [chain]
@@ -246,15 +273,23 @@ class Storage:
         chain: str,
         offers: Iterable[Offer],
         content_hash: str | None,
+        run_day: date | None = None,
     ) -> dict[str, int]:
         """Save offers and mark the run ``ok`` in ONE transaction.
 
-        Any failure rolls everything back, so the previous successful snapshot stays intact.
+        ``run_day`` (the run's Sofia date; default: today in Sofia) is the day for which the
+        run's ``active_count`` is stored. Any failure rolls everything back, so the previous
+        successful snapshot stays intact.
         """
         offers = list(offers)
+        if run_day is None:
+            run_day = datetime.now(GUARD_TZ).date()
         with self.conn:
             stats = self._save_offers_sql(run_id, chain, offers)
             self._finish_run_sql(run_id, "ok", len(offers), content_hash, None)
+            self.conn.execute(
+                "UPDATE scrape_runs SET active_count = ? WHERE id = ?", (count_active_on(offers, run_day), run_id)
+            )
         return stats
 
     def _save_offers_sql(self, run_id: int, chain: str, offers: Iterable[Offer]) -> dict[str, int]:
