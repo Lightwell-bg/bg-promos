@@ -310,9 +310,12 @@ def test_trusted_proxies_default_and_empty_warning(seeded, caplog):
     assert "trusted_proxies is empty" in caplog.text
 
 
-def test_etag_stable_across_hours_and_changes_with_stale_flag(web_settings):
+def test_etag_stable_across_hours_and_changes_with_stale_flag(web_settings, monkeypatch):
     from datetime import timedelta
+    from bg_promos import storage
     from bg_promos.web.catalog import CatalogCache
+    # run timestamps must follow the fixed NOW, not the real clock (otherwise a time bomb)
+    monkeypatch.setattr(storage, "utcnow", lambda: NOW.isoformat(timespec="seconds"))
     seed(web_settings, "lidl", [make_offer(key="1", name="One")])
     cache = CatalogCache(web_settings)
     first = cache.get(NOW)

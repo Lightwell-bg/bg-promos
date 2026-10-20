@@ -107,6 +107,20 @@ def test_validity_across_new_year():
     assert (o.valid_from, o.valid_to) == (date(2026, 12, 28), date(2027, 1, 3))
 
 
+@pytest.mark.parametrize(
+    "header, expected",
+    [
+        ("Валидност: от четвъртък 22,10, до сряда 28.10,2026 г.", (date(2026, 10, 22), date(2026, 10, 28))),
+        ("Валидност: от четвъртък 22.10, до сряда 28,10,2026 г.", (date(2026, 10, 22), date(2026, 10, 28))),
+        ("Валидност: от четвъртък 22.10. до сряда 28.10.2026 г.", (date(2026, 10, 22), date(2026, 10, 28))),
+        ("Валидност: от сряда 30,12, до вторник 05,01,2027 г.", (date(2026, 12, 30), date(2027, 1, 5))),
+    ],
+)
+def test_validity_header_separator_variants(header, expected):
+    [o] = parse_brochure(_page(header, ["Тестов продукт 1 кг"]))
+    assert (o.valid_from, o.valid_to) == expected
+
+
 HEADER = "Валидност: от четвъртък 15.10. до сряда 21.10.2026 г."
 
 

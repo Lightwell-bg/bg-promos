@@ -5,7 +5,7 @@ import dataclasses
 import logging
 import sqlite3
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -64,7 +64,8 @@ def test_start_with_label_records_source(store):
     (row,) = events(store)
     assert row[0] == "bot_start" and row[1] == "bot" and '"payload_kind":"label"' in row[2]
     assert row[3:] == ("start", "spring", "bot", "bot")
-    card = store.user_card(store.users(START.date() - timedelta(days=3650), START.date() + timedelta(days=1),
+    today = datetime.now(timezone.utc).date()  # cmd_start records with the real clock
+    card = store.user_card(store.users(today - timedelta(days=3650), today + timedelta(days=1),
                                        include_test=True)["items"][0]["visitor_id"])
     assert card["tg_id"] == 4242 and card["username"] == "ann_lee"
 

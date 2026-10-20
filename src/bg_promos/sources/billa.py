@@ -51,8 +51,9 @@ _TAG_RE = re.compile(r"^(" + "|".join(re.escape(t) for t in _TAGS) + r")" + _SEP
 _LOYALTY_PROGRAMS = {"само с billa card": "billa_card", "само с billa app": "billa_app"}
 
 _VALIDITY_RE = re.compile(
-    r"Валидност:\s*от\s+\S+\s+(\d{1,2})\.(\d{1,2})\.?\s+до\s+\S+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})"
-)
+    r"Валидност:\s*от\s+\S+\s+(\d{1,2})\s*[.,]\s*(\d{1,2})\s*[.,]?\s+до\s+\S+\s+"
+    r"(\d{1,2})\s*[.,]\s*(\d{1,2})\s*[.,]\s*(\d{4})"
+)  # separators may be "." or "," ("от четвъртък 22,10, до сряда 28.10,2026 г.")
 # Item-level period inside the text: "от 15.10 до 21.10.2026 г." / "от 15,10,2026 до 28,10,2026".
 _ITEM_PERIOD_RE = re.compile(
     r"от\s+(\d{1,2})[.,](\d{1,2})(?:[.,](\d{4}))?[.,]?\s*(?:г\.)?\s*до\s+(\d{1,2})[.,](\d{1,2})[.,](\d{4})"
