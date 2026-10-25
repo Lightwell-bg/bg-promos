@@ -12,6 +12,7 @@ import { NavDepthProvider } from "../hooks/useNavDepth";
 import { createLocalKv } from "../platform/localKv";
 import { prefs } from "../platform/prefs";
 import { createMemoryStorage } from "../platform/storage";
+import { pinClock, unpinClock } from "../test/fixedClock";
 
 function Where() {
   const l = useLocation();
@@ -41,12 +42,16 @@ async function renderApp(entry: string) {
 const where = () => screen.getByTestId("where").textContent;
 
 beforeEach(() => {
+  pinClock();
   window.localStorage.clear(); // cart writes are immediate now: do not leak between tests
   vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
   prefs.remove("recentQueries");
   prefs.remove("lang");
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  unpinClock();
+});
 
 describe("offer detail Back button", () => {
   it("direct entry + language switch (replace): Back goes to the catalog", async () => {

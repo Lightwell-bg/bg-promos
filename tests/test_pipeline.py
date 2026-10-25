@@ -489,3 +489,114 @@ def test_scheduled_collect_runs_each_chain_once_per_slot(settings):
 def test_no_export_flag(settings):
     assert run_collect(settings, [FakeSource("lidl")], export=False) == 0
     assert not (settings.data_dir / "export").exists()
+
+
+# ---- admin control (per-chain schedule override, "collect now") ------------------------------
+
+
+def control_rw(settings):
+    from bg_promos.control import ControlStore
+
+    return ControlStore(settings.control_db_path)
+
+
+def test_admin_disabled_chain_is_skipped(settings):
+    with control_rw(settings) as c:
+        c.save_schedule("lidl", False, (), 0)
+    lidl, kauf = FakeSource("lidl"), FakeSource("kaufland")
+    assert run_collect(settings, [lidl, kauf], scheduled=True) == 0
+    assert lidl.fetch_calls == 0 and kauf.fetch_calls == 1
+
+
+def test_admin_slots_override_config_slots(settings):
+    from datetime import time as dtime
+
+    # config slots (06:30/12:30/18:30 Sofia) make lidl due at 10:00 UTC; the override has a later slot only
+    with control_rw(settings) as c:
+        c.save_schedule("lidl", True, (dtime(20, 0),), 0)
+    lidl = FakeSource("lidl")
+    assert run_collect(settings, [lidl], scheduled=True, now=datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)) == 0
+    # 20:00 Sofia yesterday is the last passed slot and nothing ran since: due
+    assert lidl.fetch_calls == 1
+    assert run_collect(settings, [lidl], scheduled=True, now=datetime(2026, 10, 17, 10, 30, tzinfo=timezone.utc)) == 0
+    assert lidl.fetch_calls == 1  # the 12:30 config slot is not used: not due
+
+
+def test_pending_request_runs_not_due_chain_and_is_finished(settings):
+    lidl = FakeSource("lidl")
+    run_collect(settings, [lidl], scheduled=True)
+    assert lidl.fetch_calls == 1
+    run_collect(settings, [lidl], scheduled=True)
+    assert lidl.fetch_calls == 1  # not due
+    with control_rw(settings) as c:
+        req, _ = c.request_run("lidl")
+    assert run_collect(settings, [lidl], scheduled=True) == 0
+    assert lidl.fetch_calls == 2
+    with control_rw(settings) as c:
+        done = c.last_request("lidl")
+        assert c.pending_request("lidl") is None
+    assert (done["id"], done["status"]) == (req["id"], "ok")
+    assert done["claimed_at"] and done["finished_at"]
+    assert done["run_id"] == runs(settings, "lidl")[-1]["id"]
+    run_collect(settings, [lidl], scheduled=True)
+    assert lidl.fetch_calls == 2  # one request = one run
+
+
+def test_finish_request_uses_run_completion_time(settings, monkeypatch):
+    lidl = FakeSource("lidl")
+    with control_rw(settings) as c:
+        c.request_run("lidl")
+    # the run finishes 5 hours after the invocation time
+    monkeypatch.setattr("bg_promos.storage.utcnow", lambda: "2026-10-17T15:00:00+00:00")
+    assert collect(settings, sources={"lidl": lidl}, scheduled=True, now=NOW) == 0
+    with control_rw(settings) as c:
+        done = c.last_request("lidl")
+    assert done["finished_at"] == "2026-10-17T15:00:00+00:00" == runs(settings, "lidl")[-1]["finished_at"]
+    assert done["claimed_at"] != done["finished_at"]
+
+
+def test_scheduled_run_closes_orphaned_claims_first(settings):
+    with control_rw(settings) as c:
+        req, _ = c.request_run("lidl")
+        assert c.claim_request(req["id"])  # claimed, then the collector "crashed"
+    lidl = FakeSource("lidl")
+    run_collect(settings, [lidl], scheduled=True)
+    with control_rw(settings) as c:
+        old = c.conn.execute("SELECT * FROM collect_requests WHERE id = ?", (req["id"],)).fetchone()
+    assert old["status"] == "interrupted" and old["finished_at"]
+    assert lidl.fetch_calls == 1  # first-ever run is due by schedule, not re-run for the orphan
+
+
+def test_pending_request_runs_admin_disabled_chain_and_records_failure(settings):
+    with control_rw(settings) as c:
+        c.save_schedule("lidl", False, (), 0)
+        c.request_run("lidl")
+    lidl = FakeSource("lidl", error=RuntimeError("boom"))
+    assert run_collect(settings, [lidl], scheduled=True) == 1
+    with control_rw(settings) as c:
+        assert c.last_request("lidl")["status"] == "failed"
+
+
+def test_non_scheduled_ignores_control_db(settings):
+    with control_rw(settings) as c:
+        c.save_schedule("lidl", False, (), 0)
+        c.request_run("lidl")
+    lidl = FakeSource("lidl")
+    assert run_collect(settings, [lidl]) == 0
+    assert lidl.fetch_calls == 1
+    with control_rw(settings) as c:
+        assert c.pending_request("lidl") is not None  # untouched
+
+
+@pytest.mark.parametrize("kind", ["directory", "garbage"])
+def test_broken_control_db_falls_back_to_config(settings, kind):
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    if kind == "directory":
+        settings.control_db_path.mkdir()
+    else:
+        settings.control_db_path.write_bytes(b"not a sqlite file" * 200)
+    lidl = FakeSource("lidl")
+    assert run_collect(settings, [lidl], scheduled=True) == 0
+    assert lidl.fetch_calls == 1
+    assert run_collect(settings, [lidl], scheduled=True) == 0
+    assert lidl.fetch_calls == 1  # config slots still decide "not due"

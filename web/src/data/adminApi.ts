@@ -15,7 +15,11 @@ export class AdminAuthError extends Error {
 }
 
 export class AdminHttpError extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    /** Parsed JSON error body when the server sent one (e.g. 409 {detail, current}). */
+    public body: unknown = null,
+  ) {
     super(`admin: HTTP ${status}`);
     this.name = "AdminHttpError";
   }
@@ -29,7 +33,15 @@ async function request(method: string, path: string, body?: unknown): Promise<un
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 401) throw new AdminAuthError();
-  if (!res.ok) throw new AdminHttpError(res.status);
+  if (!res.ok) {
+    let errBody: unknown = null;
+    try {
+      errBody = await res.json();
+    } catch {
+      /* no JSON body */
+    }
+    throw new AdminHttpError(res.status, errBody);
+  }
   if (res.status === 204) return null;
   try {
     return await res.json();
@@ -486,4 +498,199 @@ export async function getUser(id: string): Promise<UserCard> {
 /** DELETE /api/admin/users/<id>: removes the visitor, sessions and events. */
 export async function deleteUser(id: string): Promise<void> {
   await request("DELETE", `/api/admin/users/${encodeURIComponent(id)}`);
+}
+
+// ---- "Сбор данных" (docs/API.md: /api/admin/collection) -------------------------------------
+
+export type CollectionDays = 7 | 30 | 90;
+
+export interface ChainSchedule {
+  enabled: boolean;
+  slots: string[];
+  source: "config" | "admin";
+  revision: number;
+  updatedAt: string | null;
+}
+
+export interface CollectionRun {
+  startedAt: string | null;
+  finishedAt: string | null;
+  status: string;
+  scheduled: boolean;
+  offersCount: number | null;
+  activeCount: number | null;
+  error: string | null;
+  durationS: number | null;
+}
+
+export interface RecentRun extends CollectionRun {
+  id: number;
+  chain: string;
+}
+
+export interface PeriodStats {
+  runs: number;
+  ok: number;
+  suspicious: number;
+  failed: number;
+  running: number;
+  successRate: number | null;
+  avgDurationS: number | null;
+  avgOffers: number | null;
+}
+
+export interface CollectRequestInfo {
+  requestedAt: string | null;
+  claimedAt: string | null;
+  finishedAt: string | null;
+  status: string | null;
+}
+
+export interface ChainCollection {
+  chain: string;
+  configEnabled: boolean;
+  schedule: ChainSchedule;
+  configSlots: string[];
+  nextSlotAt: string | null;
+  lastRun: CollectionRun | null;
+  lastOkAt: string | null;
+  stale: boolean;
+  period: PeriodStats;
+  pendingRequest: { id: number; requestedAt: string | null } | null;
+  lastRequest: CollectRequestInfo | null;
+  series: { startedAt: string; status: string; offersCount: number | null; activeCount: number | null }[];
+}
+
+export interface CollectionData {
+  now: string | null;
+  chains: ChainCollection[];
+  recentRuns: RecentRun[];
+}
+
+const numOrNull = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+function toSchedule(v: unknown): ChainSchedule {
+  const o = obj(v);
+  return {
+    enabled: o.enabled === true,
+    slots: strings(o.slots),
+    source: o.source === "admin" ? "admin" : "config",
+    revision: num(o.revision),
+    updatedAt: str(o.updated_at),
+  };
+}
+
+function toRun(v: unknown): CollectionRun {
+  const o = obj(v);
+  return {
+    startedAt: str(o.started_at),
+    finishedAt: str(o.finished_at),
+    status: str(o.status) ?? "",
+    scheduled: o.scheduled === true,
+    offersCount: numOrNull(o.offers_count),
+    activeCount: numOrNull(o.active_count),
+    error: str(o.error),
+    durationS: numOrNull(o.duration_s),
+  };
+}
+
+function toChainCollection(v: unknown): ChainCollection {
+  const o = obj(v);
+  const p = obj(o.period);
+  const pend = obj(o.pending_request);
+  const lr = obj(o.last_request);
+  return {
+    chain: str(o.chain) ?? "",
+    configEnabled: o.config_enabled !== false,
+    schedule: toSchedule(o.schedule),
+    configSlots: strings(o.config_slots),
+    nextSlotAt: str(o.next_slot_at),
+    lastRun: o.last_run ? toRun(o.last_run) : null,
+    lastOkAt: str(o.last_ok_at),
+    stale: o.stale === true,
+    period: {
+      runs: num(p.runs),
+      ok: num(p.ok),
+      suspicious: num(p.suspicious),
+      failed: num(p.failed),
+      running: num(p.running),
+      successRate: numOrNull(p.success_rate),
+      avgDurationS: numOrNull(p.avg_duration_s),
+      avgOffers: numOrNull(p.avg_offers),
+    },
+    pendingRequest: o.pending_request ? { id: num(pend.id), requestedAt: str(pend.requested_at) } : null,
+    lastRequest: o.last_request
+      ? {
+          requestedAt: str(lr.requested_at),
+          claimedAt: str(lr.claimed_at),
+          finishedAt: str(lr.finished_at),
+          status: str(lr.status),
+        }
+      : null,
+    series: arr(o.series).map((x) => {
+      const s = obj(x);
+      return {
+        startedAt: str(s.started_at) ?? "",
+        status: str(s.status) ?? "",
+        offersCount: numOrNull(s.offers_count),
+        activeCount: numOrNull(s.active_count),
+      };
+    }),
+  };
+}
+
+/** GET /api/admin/collection?days=7|30|90[&chain=x]. */
+export async function getCollection(days: CollectionDays, chain = ""): Promise<CollectionData> {
+  const q = new URLSearchParams({ days: String(days) });
+  if (chain) q.set("chain", chain);
+  const d = obj(await request("GET", `/api/admin/collection?${q.toString()}`));
+  return {
+    now: str(d.now),
+    chains: arr(d.chains).map(toChainCollection),
+    recentRuns: arr(d.recent_runs).map((x) => {
+      const o = obj(x);
+      return { ...toRun(o), id: num(o.id), chain: str(o.chain) ?? "" };
+    }),
+  };
+}
+
+/** Result of a schedule write: saved, changed elsewhere (409, with the current schedule) or rejected (422). */
+export type ScheduleOutcome =
+  | { kind: "ok"; schedule: ChainSchedule }
+  | { kind: "stale"; current: ChainSchedule | null }
+  | { kind: "invalid"; detail: string };
+
+async function scheduleCall(method: string, path: string, body?: unknown): Promise<ScheduleOutcome> {
+  try {
+    return { kind: "ok", schedule: toSchedule(await request(method, path, body)) };
+  } catch (e) {
+    if (e instanceof AdminHttpError && e.status === 409) {
+      const b = obj(e.body);
+      return { kind: "stale", current: b.current ? toSchedule(b.current) : null };
+    }
+    if (e instanceof AdminHttpError && e.status === 422) {
+      const detail = obj(e.body).detail;
+      return { kind: "invalid", detail: typeof detail === "string" ? detail : "Некорректное расписание" };
+    }
+    throw e;
+  }
+}
+
+/** PUT /api/admin/collection/schedule/{chain} {enabled, slots, revision}. */
+export function saveSchedule(
+  chain: string,
+  body: { enabled: boolean; slots: string[]; revision: number },
+): Promise<ScheduleOutcome> {
+  return scheduleCall("PUT", `/api/admin/collection/schedule/${encodeURIComponent(chain)}`, body);
+}
+
+/** DELETE /api/admin/collection/schedule/{chain}?revision=N: back to config.ini. */
+export function resetSchedule(chain: string, revision: number): Promise<ScheduleOutcome> {
+  return scheduleCall("DELETE", `/api/admin/collection/schedule/${encodeURIComponent(chain)}?revision=${revision}`);
+}
+
+/** POST /api/admin/collection/run/{chain} -> {request:{id, requested_at}, created}. */
+export async function requestRun(chain: string): Promise<{ created: boolean; requestedAt: string | null }> {
+  const d = obj(await request("POST", `/api/admin/collection/run/${encodeURIComponent(chain)}`));
+  return { created: d.created === true, requestedAt: str(obj(d.request).requested_at) };
 }

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pinClock, unpinClock } from "./test/fixedClock";
 import { IDS, sampleCatalog } from "./__fixtures__";
 import { AppRoutes } from "./App";
 import { CARTS_KEY, CartProvider } from "./data/CartContext";
@@ -39,11 +40,14 @@ async function renderApp(entry: string) {
 }
 
 beforeEach(() => {
+  pinClock();
   window.localStorage.clear();
   window.history.replaceState(null, "", "/"); // the address bar has no fragment: only the router carries it
   vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
   prefs.remove("lang");
 });
+
+afterEach(() => unpinClock());
 
 describe("language redirects keep the fragment", () => {
   for (const entry of ["/cart/import", "/xx/cart/import"]) {

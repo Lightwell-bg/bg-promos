@@ -76,6 +76,10 @@ class Settings:
         return self.data_dir / "analytics.sqlite3"
 
     @property
+    def control_db_path(self) -> Path:
+        return self.data_dir / "control.sqlite3"
+
+    @property
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 

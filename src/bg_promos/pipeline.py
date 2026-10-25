@@ -14,6 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .control import ControlStore, effective_schedule
 from .export import export_all
 from .http import HttpClient
 from .sources.base import RawDocument, Source
@@ -130,6 +131,19 @@ def last_slot_instant(slots: Sequence[dtime], tz: ZoneInfo, now_utc: datetime) -
             if instant <= now_utc:
                 candidates.append(instant)
     return max(candidates) if candidates else None
+
+
+def next_slot_instant(slots: Sequence[dtime], tz: ZoneInfo, now_utc: datetime) -> datetime | None:
+    """Earliest slot instant (UTC) strictly after now; looks at today and tomorrow in ``tz``."""
+    now_utc = _as_utc(now_utc)
+    today = now_utc.astimezone(tz).date()
+    candidates = []
+    for day in (today, today + timedelta(days=1)):
+        for slot in slots:
+            instant = datetime.combine(day, slot, tzinfo=tz).astimezone(timezone.utc)
+            if instant > now_utc:
+                candidates.append(instant)
+    return min(candidates) if candidates else None
 
 
 def is_due(
@@ -292,6 +306,20 @@ def _collect_locked(
     client = http or HttpClient(
         settings.user_agent, settings.timeout, settings.delay_seconds, settings.retries, settings.backoff_seconds
     )
+    control: ControlStore | None = None
+    if scheduled:  # admin overrides and "collect now" requests only affect the cron run
+        try:
+            control = ControlStore(settings.control_db_path)
+        except Exception:
+            log.exception("control DB unavailable, using config.ini schedule")
+            control = None
+        if control is not None:
+            try:  # we hold the exclusive collection lock, so an unfinished claim is a crashed run's orphan
+                closed = control.close_orphaned_claims(now_utc)
+                if closed:
+                    log.warning("closed %d orphaned collect request(s) as interrupted", closed)
+            except Exception:
+                log.exception("cannot close orphaned collect requests")
     with Storage(settings.db_path) as storage:
         try:
             for name in selected:
@@ -299,17 +327,52 @@ def _collect_locked(
                 if source is None:
                     log.warning("%s: disabled or unknown, skipped", name)
                     continue
-                if scheduled and not is_due(
-                    name, storage, settings.slots, settings.tz, now_utc, settings.max_retries_per_slot
-                ):
-                    log.info("%s: not due, skipped", name)
-                    continue
-                status = run_chain(source, storage, client, settings, scheduled, now_utc, accept_suspicious)
+                req = None
+                manual = False
+                if scheduled:
+                    sched_enabled, slots = True, settings.slots
+                    if control is not None:
+                        try:
+                            sched = effective_schedule(settings, control, name)
+                            sched_enabled, slots = sched.enabled, sched.slots
+                        except Exception:
+                            log.exception("%s: cannot read admin schedule, using config.ini", name)
+                        try:
+                            req = control.pending_request(name)
+                            if req is not None and control.claim_request(req["id"], now_utc):
+                                manual = True
+                        except Exception:
+                            log.exception("%s: cannot read collect requests", name)
+                    due = sched_enabled and is_due(
+                        name, storage, slots, settings.tz, now_utc, settings.max_retries_per_slot
+                    )
+                    if not due and not manual:
+                        log.info("%s: %s, skipped", name, "disabled by admin" if not sched_enabled else "not due")
+                        continue
+                    if manual:
+                        log.info("%s: manual run requested from admin", name)
+                status = "failed"
+                try:
+                    status = run_chain(source, storage, client, settings, scheduled, now_utc, accept_suspicious)
+                finally:
+                    if manual and control is not None and req is not None:
+                        try:
+                            row = storage.conn.execute(
+                                "SELECT id, finished_at FROM scrape_runs WHERE chain = ? ORDER BY id DESC LIMIT 1",
+                                (name,),
+                            ).fetchone()
+                            run_id = row[0] if row else None
+                            done_at = (row[1] if row and row[1] else None) or datetime.now(timezone.utc)
+                            control.finish_request(req["id"], status, run_id, done_at)
+                        except Exception:
+                            log.exception("%s: cannot finish collect request", name)
                 if status != "ok":
                     code = EXIT_PROBLEM
         finally:
             if own_http:
                 client.close()
+            if control is not None:
+                control.close()
         try:
             purge_raw(settings.data_dir / "raw", settings.raw_retention_days, now_utc)
         except OSError:

@@ -176,6 +176,31 @@ without it `401`. CORS does not allow credentials and these paths are not meant 
 
 Timestamps in analytics responses are UTC (`...Z`).
 
+### Collection admin API ("Сбор данных")
+Same auth as above. Schedule overrides and "collect now" requests live in `data/control.sqlite3`; the catalog DB is only read.
+A chain disabled in `config.ini` answers `409 {"detail": "chain is disabled in config.ini"}` on the write endpoints;
+an unknown chain is `404`; an unavailable control DB is `503`. Run timestamps are UTC ISO strings.
+
+- `GET /api/admin/collection?days=7|30|90[&chain=lidl|kaufland|billa]` (default `days=7`; anything else `422`) ->
+  `{"now", "tz": "Europe/Sofia", "cron": "hourly at :00", "chains": [...], "recent_runs": [...]}`. Each chain:
+  `{"chain", "config_enabled", "schedule": {"enabled", "slots": ["HH:MM"], "source": "config"|"admin", "revision", "updated_at"},
+  "config_slots", "next_slot_at", "last_run", "last_ok_at", "stale", "period": {"runs", "ok", "suspicious", "failed", "running",
+  "success_rate", "avg_duration_s", "avg_offers"}, "pending_request": {"id", "requested_at"}|null,
+  "last_request": {"requested_at", "claimed_at", "finished_at", "status"}|null,
+  "series": [{"started_at", "status", "offers_count", "active_count"}]}` (series capped at 500 runs of the period).
+  `recent_runs` (newest first, max 100, filtered by `chain` when given): `{"id", "chain", "started_at", "finished_at", "status",
+  "scheduled", "offers_count", "active_count", "content_changed", "error" (max 300 chars), "duration_s"}`.
+- `PUT /api/admin/collection/schedule/{chain}` `{"enabled": bool, "slots": ["HH:MM", ...], "revision": int}` ->
+  `200` the new schedule object; `409 {"detail": "stale", "current": {...}}` when `revision` is no longer current
+  (optimistic lock: reload and retry); `422` invalid body or slots (HH:MM, no duplicates, at most 24, at least one when enabled).
+- `DELETE /api/admin/collection/schedule/{chain}?revision=N` -> resets the chain to the `config.ini` schedule; `200` the
+  schedule object (`source: "config"`); `409 stale` as above; `422` bad `revision`.
+- `POST /api/admin/collection/run/{chain}` -> `202 {"request": {"id", "requested_at"}, "created": true}` for a new request,
+  `200 {..., "created": false}` when one is already pending (one pending request per chain). The next hourly
+  `collect --scheduled` claims it atomically and runs the chain.
+  `last_request.status` is the run status (`ok`, `suspicious`, `failed`) or `interrupted` when the collector crashed after
+  claiming the request (closed at the start of the next scheduled run; it is not re-run automatically).
+
 ## CORS
 Allowed origins from `config.ini [web] cors_origins` (default: the site URL,
 `capacitor://localhost`, `https://localhost`, `http://localhost:5173`). Methods GET, POST.

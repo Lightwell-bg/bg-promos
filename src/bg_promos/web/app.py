@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse, Response
 from ..config import Settings, load
 from .analytics_api import AnalyticsService, build_router, install_access_log_filter
 from .catalog import CatalogCache, build_meta
+from .collection_api import build_collection_router
 from .db import db_available
 from .report import ReportIn, ReportService
 
@@ -85,6 +86,7 @@ def create_app(
     app.state.reports = reports
     app.state.analytics = analytics
     app.include_router(build_router(analytics))
+    app.include_router(build_collection_router(analytics))
 
     @app.middleware("http")
     async def admin_no_store(request: Request, call_next):

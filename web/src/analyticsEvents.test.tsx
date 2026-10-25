@@ -14,6 +14,7 @@ import { Search } from "./pages/Search";
 import { installGlobalErrorHandlers, reportAppError, resetErrorCountersForTests } from "./platform/analytics";
 import { flush, getSessionInfo, resetInsightsForTests, startInsights } from "./platform/insights";
 import { renderWithCart } from "./test/cartHarness";
+import { pinClock, unpinClock } from "./test/fixedClock";
 
 interface Sent {
   name: string;
@@ -76,6 +77,7 @@ function Probe() {
 }
 
 beforeEach(() => {
+  pinClock();
   localStorage.clear();
   window.history.replaceState(null, "", "/");
   resetInsightsForTests();
@@ -83,6 +85,7 @@ beforeEach(() => {
 afterEach(() => {
   resetInsightsForTests();
   vi.unstubAllGlobals();
+  unpinClock();
 });
 
 describe("cart events", () => {

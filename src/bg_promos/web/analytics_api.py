@@ -366,6 +366,18 @@ def _parse(model: type[BaseModel], raw: bytes):
         raise HTTPException(400, "invalid request") from None
 
 
+def make_admin_guard(svc: AnalyticsService) -> Callable[[Request], None]:
+    """FastAPI dependency shared by all /api/admin routers: 404 when admin is off, 401 without a valid cookie."""
+
+    def admin_guard(request: Request) -> None:
+        if not svc.admin_enabled:
+            raise HTTPException(404, "not found")
+        if not svc.check_admin_cookie(request.cookies.get(ADMIN_COOKIE)):
+            raise HTTPException(401, "unauthorized")
+
+    return admin_guard
+
+
 def build_router(svc: AnalyticsService) -> APIRouter:
     router = APIRouter()
     s = svc.settings
@@ -396,11 +408,7 @@ def build_router(svc: AnalyticsService) -> APIRouter:
         return JSONResponse(payload, status_code=status, headers={"Cache-Control": "no-store"})
 
     # ---- admin ----------------------------------------------------------------------------
-    def admin_guard(request: Request) -> None:
-        if not svc.admin_enabled:
-            raise HTTPException(404, "not found")
-        if not svc.check_admin_cookie(request.cookies.get(ADMIN_COOKIE)):
-            raise HTTPException(401, "unauthorized")
+    admin_guard = make_admin_guard(svc)
 
     @router.post("/api/admin/login")
     def login(body: LoginIn, request: Request) -> JSONResponse:

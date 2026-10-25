@@ -391,6 +391,124 @@
   border-radius: var(--radius-sm);
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cardHead h2 {
+  margin: 0;
+}
+
+.disabledCard {
+  opacity: 0.6;
+  background: var(--bg, #f6f6f6);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badgeOk {
+  background: #dff3e5;
+  color: #1b6e3c;
+}
+
+.badgeWarn {
+  background: #fff1d6;
+  color: #7a5200;
+}
+
+.badgeBad {
+  background: var(--danger-bg);
+  color: #8c1c1c;
+}
+
+.badgeRun {
+  background: var(--brand-50);
+  color: var(--brand);
+}
+
+.staleWarn {
+  color: #8c1c1c;
+  font-weight: 700;
+}
+
+.runError {
+  color: #8c1c1c;
+  background: var(--danger-bg);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.sub {
+  font-size: 14px;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.schedule {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin: var(--space-3) 0;
+  min-width: 0;
+}
+
+.slots {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.slots li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.slots input {
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.actionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.errCell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .props {
   display: block;
   font-size: 12px;

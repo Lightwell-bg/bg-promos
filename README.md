@@ -126,6 +126,10 @@ Full contract: [docs/ANALYTICS.md](docs/ANALYTICS.md). Internal analytics, Clari
 - **Campaign link format**: bot `https://t.me/promoseubot?start=s_<campaign>[-<placement>]`, Mini App `https://t.me/promoseubot?startapp=s_<campaign>[-<placement>]`, site `https://promos.centerai.eu/?utm_source=…&utm_campaign=…`. Shared carts are tagged automatically (`share`); a session without a label inherits the visitor's last known source from the last 30 days (marked "(унаследован)" in `/admin`). Details: [docs/ANALYTICS.md](docs/ANALYTICS.md).
 - **Secrets**: set `ANALYTICS_SECRET` and `ADMIN_PASSWORD` in `.env` (template: `.env.example`).
 - **Admin page**: `/admin` (for example `https://promos.centerai.eu/admin`; not linked from the site, `noindex`). Enter `ADMIN_PASSWORD`; the session lasts 12 hours, 5 wrong passwords per IP lock the login for 15 minutes. Local steps: [docs/QUICK_START.md](docs/QUICK_START.md).
+- **"Collection" tab (Сбор данных)** in `/admin` (same session): per-chain run statistics (last run, success rate, average duration and offers over 7/30/90 days, a small offers chart, recent runs table, all times in Europe/Sofia), a per-chain schedule editor and a "Collect now" button.
+  - **Schedule override**: edits are stored in `data/control.sqlite3` (not in `config.ini`, which is never touched) and override the `config.ini` slots for that chain. The "Reset to config.ini" button deletes the override. If the control database is missing or broken, collection silently falls back to `config.ini`.
+  - **Disabled chains**: `enabled = false` in `config.ini` `[lidl]` / `[kaufland]` / `[billa]` still disables a chain completely: it is shown greyed out without controls and the API rejects schedule/run requests for it.
+  - **"Collect now"** only queues a one-off request (one pending request per chain); the collector picks it up at the next hourly cron tick (`:00`). The cron line is unchanged: `docker compose run --rm collector collect --scheduled`.
 
 ## Virtual environment and installation
 

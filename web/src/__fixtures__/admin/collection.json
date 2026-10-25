@@ -1,0 +1,75 @@
+{
+  "now": "2026-10-25T10:30:00+00:00",
+  "tz": "Europe/Sofia",
+  "cron": "hourly at :00",
+  "chains": [
+    {
+      "chain": "lidl",
+      "config_enabled": true,
+      "schedule": {"enabled": true, "slots": ["07:00", "13:00"], "source": "config", "revision": 0, "updated_at": null},
+      "config_slots": ["07:00", "13:00"],
+      "next_slot_at": "2026-10-25T11:00:00+00:00",
+      "last_run": {
+        "id": 12, "started_at": "2026-10-25T04:00:05+00:00", "finished_at": "2026-10-25T04:01:10+00:00",
+        "status": "ok", "scheduled": true, "offers_count": 640, "active_count": 600, "error": null, "duration_s": 65.0
+      },
+      "last_ok_at": "2026-10-25T04:01:10+00:00",
+      "stale": false,
+      "period": {"runs": 10, "ok": 9, "suspicious": 1, "failed": 0, "running": 0, "success_rate": 0.9, "avg_duration_s": 60.0, "avg_offers": 630.0},
+      "pending_request": null,
+      "last_request": null,
+      "series": [
+        {"started_at": "2026-10-23T04:00:00+00:00", "status": "ok", "offers_count": 610, "active_count": 580},
+        {"started_at": "2026-10-24T04:00:00+00:00", "status": "ok", "offers_count": 625, "active_count": 590},
+        {"started_at": "2026-10-25T04:00:00+00:00", "status": "ok", "offers_count": 640, "active_count": 600}
+      ]
+    },
+    {
+      "chain": "kaufland",
+      "config_enabled": true,
+      "schedule": {"enabled": true, "slots": ["06:00"], "source": "admin", "revision": 3, "updated_at": "2026-10-24T08:00:00+00:00"},
+      "config_slots": ["07:00", "13:00"],
+      "next_slot_at": "2026-10-26T03:00:00+00:00",
+      "last_run": {
+        "id": 13, "started_at": "2026-10-25T03:00:02+00:00", "finished_at": "2026-10-25T03:00:12+00:00",
+        "status": "failed", "scheduled": true, "offers_count": null, "active_count": null,
+        "error": "<img src=x onerror=alert(1)> boom", "duration_s": 10.0
+      },
+      "last_ok_at": "2026-10-22T03:01:00+00:00",
+      "stale": true,
+      "period": {"runs": 8, "ok": 6, "suspicious": 0, "failed": 2, "running": 0, "success_rate": 0.75, "avg_duration_s": 40.0, "avg_offers": 500.0},
+      "pending_request": null,
+      "last_request": {"requested_at": "2026-10-24T09:10:00+00:00", "claimed_at": "2026-10-24T10:00:00+00:00", "finished_at": "2026-10-24T10:01:00+00:00", "status": "ok"},
+      "series": [
+        {"started_at": "2026-10-21T03:00:00+00:00", "status": "ok", "offers_count": 480, "active_count": 470},
+        {"started_at": "2026-10-22T03:00:00+00:00", "status": "ok", "offers_count": 520, "active_count": 500}
+      ]
+    },
+    {
+      "chain": "billa",
+      "config_enabled": false,
+      "schedule": {"enabled": true, "slots": ["07:00"], "source": "config", "revision": 0, "updated_at": null},
+      "config_slots": ["07:00"],
+      "next_slot_at": null,
+      "last_run": null,
+      "last_ok_at": null,
+      "stale": true,
+      "period": {"runs": 0, "ok": 0, "suspicious": 0, "failed": 0, "running": 0, "success_rate": null, "avg_duration_s": null, "avg_offers": null},
+      "pending_request": null,
+      "last_request": null,
+      "series": []
+    }
+  ],
+  "recent_runs": [
+    {
+      "id": 13, "chain": "kaufland", "started_at": "2026-10-25T03:00:02+00:00", "finished_at": "2026-10-25T03:00:12+00:00",
+      "status": "failed", "scheduled": true, "offers_count": null, "active_count": null, "content_changed": null,
+      "error": "<img src=x onerror=alert(1)> boom", "duration_s": 10.0
+    },
+    {
+      "id": 12, "chain": "lidl", "started_at": "2026-10-25T04:00:05+00:00", "finished_at": "2026-10-25T04:01:10+00:00",
+      "status": "ok", "scheduled": false, "offers_count": 640, "active_count": 600, "content_changed": true,
+      "error": null, "duration_s": 65.0
+    }
+  ]
+}

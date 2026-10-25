@@ -73,6 +73,10 @@ python -c "import secrets;print(secrets.token_hex(32))"
 
 Пустой `ANALYTICS_SECRET` = случайный на каждый запуск (в логе предупреждение). Пустой `ADMIN_PASSWORD` = `/admin` выключен (API отвечает 404). В `config.ini [web]` появились `clarity_id` (пусто = Clarity выключен), `analytics_enabled = true`, `admin_cookie_secure = true`. Сервису `bot` теперь нужен том `./data:/app/data` (уже есть в `docker-compose.yml`): бот пишет `bot_start` в `data/analytics.sqlite3`. После обновления пересоздайте `api`, `web` и `bot`: `docker compose up -d --build --force-recreate api web bot`. Подробности — `docs/ANALYTICS.md`, раздел Operations.
 
+### 2b. Вкладка «Сбор данных» в /admin (выкатка 2026-10-25)
+
+Новых переменных окружения нет, строка cron не меняется (`docker compose run --rm collector collect --scheduled`, каждый час). Изменился код сборщика (`pipeline`), поэтому образы нужно пересобрать все три: `docker compose build collector api web`, затем `docker compose up -d --force-recreate api web`. Образ `collector` отдельно не запускается: cron сам использует свежесобранный. Правки расписания и разовые запросы «Собрать сейчас» хранятся в `data/control.sqlite3` (создаётся автоматически, в `.gitignore`); при резервном копировании сохраняйте всю папку `data/`, а не только каталог. Если файла нет или он повреждён, сбор работает по `config.ini`. Запрос «Собрать сейчас» выполняется при ближайшем часовом запуске cron.
+
 ## 3. Собрать и запустить api и web (на сервере)
 
 ```bash

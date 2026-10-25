@@ -23,6 +23,7 @@ import { LangProvider } from "../i18n/LangContext";
 import { setRobotsNoindex, setTitle } from "../platform/document";
 import styles from "./Admin.module.css";
 import { CHART_METRICS, TrendChart, type ChartMetric } from "./admin/Charts";
+import { Collection } from "./admin/Collection";
 import { ErrorsPanel, EmptyRow, FunnelPanel, KpiCards, PlatformsPanel, SourcesPanel } from "./admin/Panels";
 import {
   NO_SOURCE,
@@ -590,6 +591,7 @@ export function Admin() {
   }, []);
   const [userId, setUserId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [tab, setTab] = useState<"stats" | "collection">("stats");
 
   useEffect(() => {
     setTitle("Статистика");
@@ -645,16 +647,40 @@ export function Admin() {
                 onAuthLost={authLost}
               />
             ) : (
-              <Dashboard
-                query={query}
-                onQuery={setQuery}
-                preset={preset}
-                onPreset={choosePreset}
-                options={options}
-                onAuthLost={authLost}
-                onOpenUser={setUserId}
-                refreshKey={refreshKey}
-              />
+              <>
+                <div className={styles.tabs} role="group" aria-label="Раздел">
+                  {(
+                    [
+                      ["stats", "Статистика"],
+                      ["collection", "Сбор данных"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={tab === id}
+                      className={`${styles.chip} ${tab === id ? styles.chipOn : ""}`}
+                      onClick={() => setTab(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {tab === "collection" ? (
+                  <Collection onAuthLost={authLost} />
+                ) : (
+                  <Dashboard
+                    query={query}
+                    onQuery={setQuery}
+                    preset={preset}
+                    onPreset={choosePreset}
+                    options={options}
+                    onAuthLost={authLost}
+                    onOpenUser={setUserId}
+                    refreshKey={refreshKey}
+                  />
+                )}
+              </>
             )}
           </>
         )}

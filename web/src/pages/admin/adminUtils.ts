@@ -119,6 +119,42 @@ export function sourceLabel(kind: string, source: string | null, campaign: strin
   return parts.length ? parts.join(" / ") : NO_SOURCE;
 }
 
+/** Backend run timestamps may be naive (UTC without a zone mark): treat those as UTC, not browser-local. */
+function parseUtc(iso: string): Date {
+  const hasZone = /(Z|[+-]\d\d:?\d\d)$/i.test(iso);
+  return new Date(hasZone || !iso.includes("T") ? iso : `${iso}Z`);
+}
+
+/** "25.10.2026, 14:05" in Europe/Sofia (never the browser zone). */
+export function fmtSofia(iso: string | null): string {
+  if (!iso) return "—";
+  const d = parseUtc(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Sofia",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+/** "14:05" in Europe/Sofia. */
+export function fmtHM(iso: string | null): string {
+  if (!iso) return "—";
+  const d = parseUtc(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Sofia", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+}
+
+/** 65 -> "1 мин 5 с"; 12.4 -> "12 с". */
+export function fmtDuration(s: number | null): string {
+  if (s === null) return "—";
+  const t = Math.round(s);
+  return t < 60 ? `${t} с` : `${Math.floor(t / 60)} мин ${t % 60} с`;
+}
+
 export function fmtTime(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);

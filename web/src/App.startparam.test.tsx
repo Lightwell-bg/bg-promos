@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pinClock, unpinClock } from "./test/fixedClock";
 import { IDS, sampleCatalog } from "./__fixtures__";
 import { AppRoutes, StartParamGate } from "./App";
 import { CARTS_KEY, CartProvider } from "./data/CartContext";
@@ -49,11 +50,14 @@ const pairs = (c: { cart: { lines: { offerId: string; qty: number }[] } }) =>
   c.cart.lines.map((l) => [l.offerId, l.qty]).sort();
 
 beforeEach(() => {
+  pinClock();
   window.localStorage.clear();
   vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
   prefs.remove("lang");
   prefs.remove("config");
 });
+
+afterEach(() => unpinClock());
 
 describe("Telegram start parameter intake", () => {
   it("first ever launch: the shared list is the only list; the parameter is stripped from the query", async () => {
