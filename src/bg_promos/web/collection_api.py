@@ -34,7 +34,8 @@ log = logging.getLogger(__name__)
 
 PERIOD_DAYS = (7, 30, 90)
 SERIES_CAP = 500
-RECENT_CAP = 100
+RUNS_MAX_LIMIT = 100
+RUN_STATUSES = ("ok", "suspicious", "failed", "running")
 ERROR_MAX = 300
 CRON_TEXT = "hourly at :00"
 
@@ -123,12 +124,11 @@ def build_collection_router(svc: AnalyticsService) -> APIRouter:
         return control
 
     # ---- statistics -----------------------------------------------------------------------
-    def collect_stats(days: int, chain_filter: str | None) -> dict:
+    def collect_stats(days: int) -> dict:
         now = svc.now().astimezone(timezone.utc)
         cutoff = _iso(now - timedelta(days=days))
         control = _open_control(s.control_db_path)
         per_chain: dict[str, dict[str, Any]] = {c: {"rows": [], "last": None, "last_ok": None} for c in CHAINS}
-        recent: list[dict] = []
         try:
             with read_storage(s.db_path) as storage:
                 for c in CHAINS:
@@ -141,24 +141,8 @@ def build_collection_router(svc: AnalyticsService) -> APIRouter:
                     per_chain[c]["last_ok"] = q(
                         "SELECT finished_at FROM scrape_runs WHERE chain = ? AND status = 'ok' "
                         "ORDER BY started_at DESC, id DESC LIMIT 1", (c,)).fetchone()
-                if chain_filter:
-                    cur = storage.conn.execute(
-                        "SELECT * FROM scrape_runs WHERE chain = ? ORDER BY started_at DESC, id DESC LIMIT ?",
-                        (chain_filter, RECENT_CAP))
-                else:
-                    cur = storage.conn.execute("SELECT * FROM scrape_runs ORDER BY started_at DESC, id DESC LIMIT ?", (RECENT_CAP,))
-                for r in cur.fetchall():
-                    recent.append({
-                        "id": r["id"], "chain": r["chain"], "started_at": r["started_at"],
-                        "finished_at": r["finished_at"], "status": r["status"], "scheduled": bool(r["scheduled"]),
-                        "offers_count": r["offers_count"], "active_count": r["active_count"],
-                        "content_changed": None if r["content_changed"] is None else bool(r["content_changed"]),
-                        "error": (r["error"] or None) and r["error"][:ERROR_MAX],
-                        "duration_s": _duration(r),
-                    })
         except sqlite3.Error:
             log.warning("catalog DB unreadable for collection stats", exc_info=True)
-            recent = []
         try:
             chains = []
             for c in CHAINS:
@@ -202,15 +186,63 @@ def build_collection_router(svc: AnalyticsService) -> APIRouter:
         finally:
             if control is not None:
                 control.close()
-        return {"now": _iso(now), "tz": s.timezone, "cron": CRON_TEXT, "chains": chains, "recent_runs": recent}
+        return {"now": _iso(now), "tz": s.timezone, "cron": CRON_TEXT, "chains": chains}
 
     @router.get("/api/admin/collection", dependencies=guard)
-    async def collection(days: str = "7", chain: str | None = None) -> JSONResponse:
+    async def collection(days: str = "7") -> JSONResponse:
         if days not in {str(d) for d in PERIOD_DAYS}:
             raise HTTPException(422, "days must be 7, 30 or 90")
-        if chain is not None and chain not in CHAINS:
+        return JSONResponse(await run_in_threadpool(collect_stats, int(days)))
+
+    # ---- paged run list -------------------------------------------------------------------
+    def list_runs(days: int, chain: str | None, status: str | None, limit: int, offset: int) -> dict:
+        now = svc.now().astimezone(timezone.utc)
+        where, args = ["started_at >= ?"], [_iso(now - timedelta(days=days))]
+        if chain:
+            where.append("chain = ?")
+            args.append(chain)
+        if status:
+            where.append("status = ?")
+            args.append(status)
+        cond = " AND ".join(where)
+        total, items = 0, []
+        try:
+            with read_storage(s.db_path) as storage:
+                q = storage.conn.execute
+                total = q(f"SELECT COUNT(*) FROM scrape_runs WHERE {cond}", args).fetchone()[0]
+                rows = q(f"SELECT * FROM scrape_runs WHERE {cond} ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?",
+                         [*args, limit, offset]).fetchall()
+            for r in rows:
+                items.append({
+                    "id": r["id"], "chain": r["chain"], "started_at": r["started_at"],
+                    "finished_at": r["finished_at"], "status": r["status"], "scheduled": bool(r["scheduled"]),
+                    "offers_count": r["offers_count"], "active_count": r["active_count"],
+                    "content_changed": None if r["content_changed"] is None else bool(r["content_changed"]),
+                    "error": (r["error"] or None) and r["error"][:ERROR_MAX],
+                    "duration_s": _duration(r),
+                })
+        except sqlite3.Error:
+            log.warning("catalog DB unreadable for the run list", exc_info=True)
+            total, items = 0, []
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def _int_param(value: str, name: str, lo: int, hi: int) -> int:
+        if not (value.isascii() and value.isdigit()) or not lo <= int(value) <= hi:
+            raise HTTPException(422, f"{name} must be an integer {lo}..{hi}")
+        return int(value)
+
+    @router.get("/api/admin/collection/runs", dependencies=guard)
+    async def collection_runs(days: str = "7", chain: str | None = None, status: str | None = None,
+                              limit: str = "20", offset: str = "0") -> JSONResponse:
+        if days not in {str(d) for d in PERIOD_DAYS}:
+            raise HTTPException(422, "days must be 7, 30 or 90")
+        if chain is not None and chain != "" and chain not in CHAINS:
             raise HTTPException(404, "unknown chain")
-        return JSONResponse(await run_in_threadpool(collect_stats, int(days), chain))
+        if status is not None and status != "" and status not in RUN_STATUSES:
+            raise HTTPException(422, "status must be ok, suspicious, failed or running")
+        lim = _int_param(limit, "limit", 1, RUNS_MAX_LIMIT)
+        off = _int_param(offset, "offset", 0, 10_000_000)
+        return JSONResponse(await run_in_threadpool(list_runs, int(days), chain or None, status or None, lim, off))
 
     # ---- schedule -------------------------------------------------------------------------
     def stale_response(chain: str, control: ControlStore, exc: StaleRevisionError) -> JSONResponse:

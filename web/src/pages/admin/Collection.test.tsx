@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import collectionFixture from "../../__fixtures__/admin/collection.json";
+import runsFixture from "../../__fixtures__/admin/collection_runs.json";
 import { LangProvider } from "../../i18n/LangContext";
 import { Collection, validateSlots } from "./Collection";
 
@@ -20,6 +21,25 @@ let gate: Promise<void> | null = null;
 
 function json(status: number, body: unknown = {}): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
+}
+
+/** Answers GET /api/admin/collection/runs; tests replace it to page, filter or delay. */
+let runsHandler: (params: URLSearchParams) => Response | Promise<Response>;
+
+function defaultRuns(): Response {
+  return json(200, runsFixture);
+}
+
+/** `total` synthetic runs, newest first; id = total - index, so page contents are easy to assert. */
+function pagedRuns(total: number, params: URLSearchParams): Response {
+  const limit = Number(params.get("limit"));
+  const offset = Number(params.get("offset"));
+  const items = Array.from({ length: Math.max(0, Math.min(limit, total - offset)) }, (_, i) => ({
+    ...runsFixture.items[1],
+    id: total - offset - i,
+    offers_count: 1000 + total - offset - i,
+  }));
+  return json(200, { items, total, limit, offset });
 }
 
 function handle(method: string, url: string, init?: RequestInit): Response {
@@ -50,11 +70,16 @@ beforeEach(() => {
   putStatus = 200;
   runCreated = true;
   gate = null;
+  runsHandler = defaultRuns;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method !== "GET" && gate) await gate;
+      if (method === "GET" && url.startsWith("/api/admin/collection/runs")) {
+        reqs.push({ method, url });
+        return runsHandler(new URL(url, "http://x").searchParams);
+      }
       return handle(method, url, init);
     }),
   );
@@ -193,6 +218,124 @@ describe("Collection tab", () => {
     await waitFor(() => expect(reqs.some((r) => r.url.includes("chain=kaufland"))).toBe(true));
     await userEvent.click(screen.getByRole("button", { name: "30 дней" }));
     await waitFor(() => expect(reqs.some((r) => r.url.includes("days=30"))).toBe(true));
+  });
+
+  describe("recent runs paging", () => {
+    const runsReqs = () => reqs.filter((r) => r.url.startsWith("/api/admin/collection/runs"));
+    const lastRuns = () => new URL(runsReqs().at(-1)!.url, "http://x").searchParams;
+    const region = () => screen.getByRole("region", { name: "Последние запуски" });
+
+    it("renders page 1 with the total and the pager", async () => {
+      runsHandler = (p) => pagedRuns(45, p);
+      await renderCollection();
+      await within(region()).findByText(/Страница 1 из 3 · всего 45/);
+      const p = lastRuns();
+      expect(p.get("days")).toBe("7");
+      expect(p.get("limit")).toBe("20");
+      expect(p.get("offset")).toBe("0");
+      expect(p.has("chain")).toBe(false);
+      expect(p.has("status")).toBe(false);
+      expect(within(region()).getByRole("button", { name: "Назад" })).toBeDisabled();
+      expect(within(region()).getByRole("button", { name: "Вперёд" })).toBeEnabled();
+      expect(within(region()).getAllByRole("row")).toHaveLength(21); // header + 20
+    });
+
+    it("next page requests the right offset and keeps the filters", async () => {
+      runsHandler = (p) => pagedRuns(45, p);
+      await renderCollection();
+      await userEvent.selectOptions(screen.getByLabelText("Сеть"), "lidl");
+      await within(region()).findByText(/Страница 1 из 3/);
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 2 из 3/);
+      const p = lastRuns();
+      expect(p.get("offset")).toBe("20");
+      expect(p.get("chain")).toBe("lidl");
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 3 из 3/);
+      expect(lastRuns().get("offset")).toBe("40");
+      expect(within(region()).getAllByRole("row")).toHaveLength(6); // header + 5
+      expect(within(region()).getByRole("button", { name: "Вперёд" })).toBeDisabled();
+    });
+
+    it("a filter or period change goes back to page 1", async () => {
+      runsHandler = (p) => pagedRuns(45, p);
+      await renderCollection();
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 2 из 3/);
+      await userEvent.selectOptions(screen.getByLabelText("Статус"), "failed");
+      await within(region()).findByText(/Страница 1 из 3/);
+      expect(lastRuns().get("status")).toBe("failed");
+      expect(lastRuns().get("offset")).toBe("0");
+
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 2 из 3/);
+      await userEvent.selectOptions(screen.getByLabelText("Сеть"), "kaufland");
+      await within(region()).findByText(/Страница 1 из 3/);
+      expect(lastRuns().get("offset")).toBe("0");
+
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 2 из 3/);
+      await userEvent.click(screen.getByRole("button", { name: "30 дней" }));
+      await within(region()).findByText(/Страница 1 из 3/);
+      expect(lastRuns().get("days")).toBe("30");
+      expect(lastRuns().get("offset")).toBe("0");
+    });
+
+    it("drops a stale response that arrives after a newer one", async () => {
+      const releases: (() => void)[] = [];
+      runsHandler = (p) => {
+        if (p.get("chain") === "lidl") {
+          // the slow answer for the older query
+          return new Promise<Response>((res) => {
+            releases.push(() => res(json(200, { items: [{ ...runsFixture.items[1], id: 99, offers_count: 9999 }], total: 1, limit: 20, offset: 0 })));
+          });
+        }
+        return pagedRuns(2, p);
+      };
+      await renderCollection();
+      await within(region()).findByText(/всего 2/);
+      await userEvent.selectOptions(screen.getByLabelText("Сеть"), "lidl"); // slow, stays pending
+      await waitFor(() => expect(releases).toHaveLength(1));
+      await userEvent.selectOptions(screen.getByLabelText("Сеть"), "kaufland"); // fast, newer
+      await waitFor(() => expect(lastRuns().get("chain")).toBe("kaufland"));
+      await within(region()).findByText(/всего 2/);
+      releases[0]();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(within(region()).getByText(/всего 2/)).toBeInTheDocument();
+      expect(within(region()).queryByText("9999")).not.toBeInTheDocument();
+    });
+
+    it("refreshes the CURRENT page after a mutation", async () => {
+      runsHandler = (p) => pagedRuns(45, p);
+      await renderCollection();
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 2 из 3/);
+      const before = runsReqs().length;
+      const lidl = screen.getByRole("region", { name: "Lidl" });
+      await userEvent.click(within(lidl).getByRole("button", { name: "Собрать сейчас" }));
+      await waitFor(() => expect(runsReqs().length).toBeGreaterThan(before));
+      expect(lastRuns().get("offset")).toBe("20");
+    });
+
+    it("jumps back when the current page no longer exists", async () => {
+      let total = 45;
+      runsHandler = (p) => pagedRuns(total, p);
+      await renderCollection();
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await userEvent.click(within(region()).getByRole("button", { name: "Вперёд" }));
+      await within(region()).findByText(/Страница 3 из 3/);
+      total = 25;
+      const lidl = screen.getByRole("region", { name: "Lidl" });
+      await userEvent.click(within(lidl).getByRole("button", { name: "Собрать сейчас" }));
+      await within(region()).findByText(/Страница 2 из 2 · всего 25/);
+    });
+
+    it("shows 'Нет данных' for an empty list", async () => {
+      runsHandler = (p) => pagedRuns(0, p);
+      await renderCollection();
+      await within(region()).findByText(/Страница 1 из 1 · всего 0/);
+      expect(within(region()).getByText("Нет данных")).toBeInTheDocument();
+    });
   });
 
   it("refreshes after a slow mutation with the CURRENT period, not the one captured at click time", async () => {

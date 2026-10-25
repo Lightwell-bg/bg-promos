@@ -564,7 +564,6 @@ export interface ChainCollection {
 export interface CollectionData {
   now: string | null;
   chains: ChainCollection[];
-  recentRuns: RecentRun[];
 }
 
 const numOrNull = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -639,15 +638,37 @@ function toChainCollection(v: unknown): ChainCollection {
   };
 }
 
-/** GET /api/admin/collection?days=7|30|90[&chain=x]. */
-export async function getCollection(days: CollectionDays, chain = ""): Promise<CollectionData> {
-  const q = new URLSearchParams({ days: String(days) });
+/** GET /api/admin/collection?days=7|30|90. */
+export async function getCollection(days: CollectionDays): Promise<CollectionData> {
+  const d = obj(await request("GET", `/api/admin/collection?days=${days}`));
+  return { now: str(d.now), chains: arr(d.chains).map(toChainCollection) };
+}
+
+export const RUNS_PAGE_SIZE = 20;
+
+export interface RunsPage {
+  total: number;
+  items: RecentRun[];
+}
+
+/** GET /api/admin/collection/runs?days&chain&status&limit&offset -> {items, total, limit, offset}; page is 1-based. */
+export async function getCollectionRuns(
+  days: CollectionDays,
+  chain: string,
+  status: string,
+  page: number,
+): Promise<RunsPage> {
+  const q = new URLSearchParams({
+    days: String(days),
+    limit: String(RUNS_PAGE_SIZE),
+    offset: String(Math.max(0, page - 1) * RUNS_PAGE_SIZE),
+  });
   if (chain) q.set("chain", chain);
-  const d = obj(await request("GET", `/api/admin/collection?${q.toString()}`));
+  if (status) q.set("status", status);
+  const d = obj(await request("GET", `/api/admin/collection/runs?${q.toString()}`));
   return {
-    now: str(d.now),
-    chains: arr(d.chains).map(toChainCollection),
-    recentRuns: arr(d.recent_runs).map((x) => {
+    total: num(d.total),
+    items: arr(d.items).map((x) => {
       const o = obj(x);
       return { ...toRun(o), id: num(o.id), chain: str(o.chain) ?? "" };
     }),

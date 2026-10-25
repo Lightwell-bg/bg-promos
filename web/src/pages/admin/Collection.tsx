@@ -3,6 +3,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   AdminAuthError,
   getCollection,
+  getCollectionRuns,
+  RUNS_PAGE_SIZE,
   requestRun,
   resetSchedule,
   saveSchedule,
@@ -10,6 +12,7 @@ import {
   type ChainSchedule,
   type CollectionData,
   type CollectionDays,
+  type RunsPage,
   type ScheduleOutcome,
 } from "../../data/adminApi";
 import styles from "../Admin.module.css";
@@ -304,21 +307,27 @@ function truncate(s: string, n = 80): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
+const RUN_STATUS_FILTER = ["ok", "suspicious", "failed", "running"] as const;
+
 export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
   const [days, setDays] = useState<CollectionDays>(7);
   const [chain, setChain] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
   const [data, setData] = useState<CollectionData | null>(null);
   const [failed, setFailed] = useState(false);
+  const [runs, setRuns] = useState<RunsPage | null>(null);
+  const [runsFailed, setRunsFailed] = useState(false);
   const seq = useRef(0);
-  // Always the latest filter: a refresh triggered by a mutation must not fetch an older period/chain.
-  const query = useRef({ days, chain });
-  query.current = { days, chain };
+  const runsSeq = useRef(0);
+  // Always the latest filters: a refresh triggered by a mutation must not fetch an older period/page.
+  const query = useRef({ days, chain, status, page });
+  query.current = { days, chain, status, page };
 
   const load = useCallback(async () => {
     const my = ++seq.current;
-    const { days: d0, chain: c0 } = query.current;
     try {
-      const d = await getCollection(d0, c0);
+      const d = await getCollection(query.current.days);
       if (my === seq.current) {
         setData(d);
         setFailed(false);
@@ -329,9 +338,40 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
     }
   }, [onAuthLost]);
 
+  const loadRuns = useCallback(async () => {
+    const my = ++runsSeq.current;
+    const { days: d0, chain: c0, status: s0, page: p0 } = query.current;
+    try {
+      const r = await getCollectionRuns(d0, c0, s0, p0);
+      if (my !== runsSeq.current) return;
+      setRunsFailed(false);
+      const lastPage = Math.max(1, Math.ceil(r.total / RUNS_PAGE_SIZE));
+      if (p0 > lastPage) {
+        // The list shrank (or a stale page number): jump to the last page; the effect reloads it.
+        setPage(lastPage);
+        return;
+      }
+      setRuns(r);
+    } catch (e) {
+      if (e instanceof AdminAuthError) onAuthLost();
+      else if (my === runsSeq.current) setRunsFailed(true);
+    }
+  }, [onAuthLost]);
+
+  /** Refresh the cards and the current page of the runs table (after "collect now" / schedule save). */
+  const reload = useCallback(async () => {
+    await Promise.all([load(), loadRuns()]);
+  }, [load, loadRuns]);
+
   useEffect(() => {
     void load();
-  }, [load, days, chain]);
+  }, [load, days]);
+
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns, days, chain, status, page]);
+
+  const pages = Math.max(1, Math.ceil((runs?.total ?? 0) / RUNS_PAGE_SIZE));
 
   return (
     <>
@@ -343,7 +383,10 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
               type="button"
               aria-pressed={days === d}
               className={`${styles.chip} ${days === d ? styles.chipOn : ""}`}
-              onClick={() => setDays(d)}
+              onClick={() => {
+                setDays(d);
+                setPage(1);
+              }}
             >
               {d} дней
             </button>
@@ -359,7 +402,7 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
       {!data && !failed && <p role="status">Загрузка…</p>}
 
       {data?.chains.map((c) => (
-        <ChainCard key={c.chain} c={c} reload={load} onAuthLost={onAuthLost} />
+        <ChainCard key={c.chain} c={c} reload={reload} onAuthLost={onAuthLost} />
       ))}
 
       {data && (
@@ -367,7 +410,13 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
           <h2>Последние запуски</h2>
           <label className={styles.field}>
             <span>Сеть</span>
-            <select value={chain} onChange={(e) => setChain(e.target.value)}>
+            <select
+              value={chain}
+              onChange={(e) => {
+                setChain(e.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">Все</option>
               {data.chains.map((c) => (
                 <option key={c.chain} value={c.chain}>
@@ -376,6 +425,28 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
               ))}
             </select>
           </label>
+          <label className={styles.field}>
+            <span>Статус</span>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Все</option>
+              {RUN_STATUS_FILTER.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {runsFailed && (
+            <p role="alert" className={styles.error}>
+              Не удалось загрузить список запусков
+            </p>
+          )}
           <div className={styles.scroll}>
             <table className={styles.table}>
               <thead>
@@ -391,8 +462,8 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {data.recentRuns.length ? (
-                  data.recentRuns.map((r) => (
+                {runs?.items.length ? (
+                  runs.items.map((r) => (
                     <tr key={r.id}>
                       <td>{fmtSofia(r.startedAt)}</td>
                       <td>{chainName(r.chain)}</td>
@@ -417,6 +488,17 @@ export function Collection({ onAuthLost }: { onAuthLost: () => void }) {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className={styles.pager}>
+            <button type="button" className={styles.chip} disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Назад
+            </button>
+            <span>
+              Страница {page} из {pages} · всего {runs?.total ?? 0}
+            </span>
+            <button type="button" className={styles.chip} disabled={page >= pages} onClick={() => setPage(page + 1)}>
+              Вперёд
+            </button>
           </div>
         </section>
       )}

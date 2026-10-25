@@ -181,15 +181,19 @@ Same auth as above. Schedule overrides and "collect now" requests live in `data/
 A chain disabled in `config.ini` answers `409 {"detail": "chain is disabled in config.ini"}` on the write endpoints;
 an unknown chain is `404`; an unavailable control DB is `503`. Run timestamps are UTC ISO strings.
 
-- `GET /api/admin/collection?days=7|30|90[&chain=lidl|kaufland|billa]` (default `days=7`; anything else `422`) ->
-  `{"now", "tz": "Europe/Sofia", "cron": "hourly at :00", "chains": [...], "recent_runs": [...]}`. Each chain:
+- `GET /api/admin/collection?days=7|30|90` (default `days=7`; anything else `422`) ->
+  `{"now", "tz": "Europe/Sofia", "cron": "hourly at :00", "chains": [...]}`. Each chain:
   `{"chain", "config_enabled", "schedule": {"enabled", "slots": ["HH:MM"], "source": "config"|"admin", "revision", "updated_at"},
   "config_slots", "next_slot_at", "last_run", "last_ok_at", "stale", "period": {"runs", "ok", "suspicious", "failed", "running",
   "success_rate", "avg_duration_s", "avg_offers"}, "pending_request": {"id", "requested_at"}|null,
   "last_request": {"requested_at", "claimed_at", "finished_at", "status"}|null,
   "series": [{"started_at", "status", "offers_count", "active_count"}]}` (series capped at 500 runs of the period).
-  `recent_runs` (newest first, max 100, filtered by `chain` when given): `{"id", "chain", "started_at", "finished_at", "status",
-  "scheduled", "offers_count", "active_count", "content_changed", "error" (max 300 chars), "duration_s"}`.
+- `GET /api/admin/collection/runs?days=7|30|90[&chain=lidl|kaufland|billa][&status=ok|suspicious|failed|running][&limit=20][&offset=0]`
+  -> `{"items": [...], "total", "limit", "offset"}`: the paged run list for the period (same `limit`/`offset` pattern as
+  `/api/admin/users`; `limit` 1..100, default 20; a page past the end gives empty `items` with the real `total`). Newest
+  first (`started_at`, then `id`). Bad `days`/`status`/`limit`/`offset` -> `422`, unknown `chain` -> `404`. Item:
+  `{"id", "chain", "started_at", "finished_at", "status", "scheduled", "offers_count", "active_count", "content_changed",
+  "error" (max 300 chars), "duration_s"}`.
 - `PUT /api/admin/collection/schedule/{chain}` `{"enabled": bool, "slots": ["HH:MM", ...], "revision": int}` ->
   `200` the new schedule object; `409 {"detail": "stale", "current": {...}}` when `revision` is no longer current
   (optimistic lock: reload and retry); `422` invalid body or slots (HH:MM, no duplicates, at most 24, at least one when enabled).
